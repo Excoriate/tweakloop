@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a capability or improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing, skim [docs/architecture/](../../tree/main/docs/architecture)
+        and [docs/prd.md](../../blob/main/docs/prd.md) — the roadmap chapter lists
+        what is deliberately deferred and why.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow gap or friction does this address? Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Tweakloop to do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI / agent protocol
+        - Daemon / storage / events
+        - Browser shell / review UX
+        - Artifacts / revisions / diffing
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, workarounds, or prior art (e.g. how lavish-axi handles it).

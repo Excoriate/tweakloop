@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azure Platform Architecture</title>
+<style>
+  body { max-width: 760px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.6 system-ui, sans-serif; color: #1f2937; }
+  section { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  h2 { margin-top: 0; }
+</style>
+</head>
+<body>
+<h1>Azure Platform Architecture</h1>
+
+<section data-tweak-id="architecture.network" data-tweak-source="docs/architecture.md#network">
+  <h2>Network</h2>
+  <p>Hub-and-spoke topology. Ingress is private only, through the internal
+  Application Gateway. Spokes host workload subnets with NSGs per tier.</p>
+</section>
+
+<section data-tweak-id="architecture.data-platform" data-tweak-source="docs/architecture.md#data-platform">
+  <h2>Data Platform</h2>
+  <p>Azure PostgreSQL Flexible Server with TimescaleDB for telemetry.
+  Cold data tiers to ADLS after 90 days.</p>
+</section>
+
+<section data-tweak-id="architecture.identity" data-tweak-source="docs/architecture.md#identity">
+  <h2>Identity</h2>
+  <p>Managed identities for all workloads; Entra ID groups with PIM for
+  human access. No client secrets anywhere in configuration.</p>
+</section>
+</body>
+</html>

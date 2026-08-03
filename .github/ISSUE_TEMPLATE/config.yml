@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture & design questions
+    url: https://github.com/alextorresruiz/tweakloop/discussions
+    about: Discuss the design (docs/architecture/ is the authoritative reference) before opening an issue.

@@ -1,0 +1,14 @@
+{
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!dist", "!node_modules", "!.ai"]
+  }
+}

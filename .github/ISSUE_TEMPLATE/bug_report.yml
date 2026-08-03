@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in Tweakloop misbehaves — daemon, CLI, shell, or protocol.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more precisely we can
+        replay it, the faster it gets fixed — Tweakloop is an event-sourced
+        system, so exact commands and event sequences matter.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. Ran `tweak open examples/plan.html`
+        2. Expected the review shell to open
+        3. Got ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Exact commands, in order, from a clean workspace if possible.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tweakloop version
+      description: Output of `tweak --version`
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and Node version (`node --version`)
+      placeholder: macOS 15.5, Node 24.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: |
+        The daemon log lives in the workspace state directory
+        (e.g. `~/Library/Application Support/tweakloop/workspaces/<id>/daemon.log`
+        on macOS, `$XDG_STATE_HOME/tweakloop/workspaces/<id>/daemon.log` on Linux).
+      render: text
