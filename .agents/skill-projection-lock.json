@@ -1,0 +1,16 @@
+{
+  "protocol": "tweakloop.skill-projection-lock/v1",
+  "canonical": ".agents/skills",
+  "canonicalSha256": "a573985fbda0528ff88547ac21315da24121408d5e584aa3021fadbc2e098e08",
+  "canonicalFiles": 32,
+  "consumers": {
+    "skills": {
+      "sha256": "a573985fbda0528ff88547ac21315da24121408d5e584aa3021fadbc2e098e08",
+      "files": 32
+    },
+    ".claude/skills": {
+      "sha256": "a573985fbda0528ff88547ac21315da24121408d5e584aa3021fadbc2e098e08",
+      "files": 32
+    }
+  }
+}

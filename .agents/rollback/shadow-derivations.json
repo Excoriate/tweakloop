@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "tweakloop.agent-derivations/v1",
+  "phase": "shadow",
+  "canonicalRoot": ".agents",
+  "derivations": [
+    {
+      "id": "root-agent-guide",
+      "type": "identity-copy",
+      "mode": "validate-only",
+      "source": ".agents/AGENTS.md",
+      "consumer": "AGENTS.md",
+      "generator": "node scripts/sync-agent-harness.mjs",
+      "validator": "node scripts/validate-agent-harness.mjs --json",
+      "activation": {
+        "status": "unverified",
+        "proof": "Fresh Codex and Cursor contexts observe one unique guide marker at the intended precedence."
+      },
+      "rollback": "Keep the existing root AGENTS.md as the live guide and remove the shadow edge.",
+      "deletion": "Delete validate-only mode after a fresh native-load probe proves the root bridge and its rollback."
+    },
+    {
+      "id": "claude-agent-guide-import",
+      "type": "native-import",
+      "mode": "planned",
+      "source": ".agents/AGENTS.md",
+      "consumer": "CLAUDE.md",
+      "generator": "node scripts/sync-agent-harness.mjs --activate",
+      "validator": "Fresh Claude context plus node scripts/validate-agent-harness.mjs --json",
+      "activation": {
+        "status": "unverified",
+        "proof": "A fresh Claude context observes the canonical marker exactly once through a one-line native import."
+      },
+      "rollback": "Preserve the existing CLAUDE.md symlink and root guide behavior.",
+      "deletion": "Delete the planned import if the target Claude version cannot load it or a native loader makes it redundant."
+    }
+  ]
+}

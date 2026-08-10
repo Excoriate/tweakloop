@@ -1,0 +1,11 @@
+{
+  "protocol": "tweakloop.agent-derivation-lock/v1",
+  "phase": "activate",
+  "rows": {
+    "root-agent-guide": {
+      "sourceHash": "dee87339708c7a89dbe600a5f2639541d9420231d05d68583aa0ed2eb282d89c",
+      "expectedHash": "dee87339708c7a89dbe600a5f2639541d9420231d05d68583aa0ed2eb282d89c",
+      "consumerHash": "dee87339708c7a89dbe600a5f2639541d9420231d05d68583aa0ed2eb282d89c"
+    }
+  }
+}

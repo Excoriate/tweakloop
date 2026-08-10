@@ -1,0 +1,30 @@
+{
+  "skill": "excalidraw",
+  "purpose": "Discriminate identity-safe managed board mutation from raw JSON and preview substitution.",
+  "scenarios": [
+    {
+      "id": "capability-gated-edit",
+      "prompt": "Move a commented service box and relabel its arrow on this board.",
+      "base_model_fails": "Synthesizes element JSON or uses browser coordinates without a confirmed editor capability.",
+      "skill_passes_when": "Selects a controllable native or confirmed semantic route and otherwise stops BLOCKED.",
+      "discriminating_observable": "No renderer-owned fields are authored and absence of capability prevents mutation.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "target-identity-survives",
+      "prompt": "Apply feedback to two targeted existing elements and publish the board.",
+      "base_model_fails": "Regenerates the scene, changing targeted IDs or anchors while producing similar pixels.",
+      "skill_passes_when": "Uses managed checkout targets and publishes only after accepted sync preserves identities.",
+      "discriminating_observable": "Target IDs, types, and anchor IDs remain equal before and after the rendered change.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "editable-source-not-preview",
+      "prompt": "Embed the updated board in the review document.",
+      "base_model_fails": "Uses PNG/SVG as mutable source or duplicates scene JSON in the parent.",
+      "skill_passes_when": "Embeds immutable artifact and revision references to separate editable JSON.",
+      "discriminating_observable": "The parent contains only the immutable board reference and the board remains editable.",
+      "baseline_expected": "fail"
+    }
+  ]
+}

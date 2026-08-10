@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Architecture diagram skill design</title>
+  <style>
+    :root{font-family:ui-sans-serif,system-ui,sans-serif;color:#18212b;background:#f4f6f8;line-height:1.5}
+    body{max-width:68rem;margin:auto;padding:2rem}section{background:white;border:1px solid #cbd3dc;border-radius:.6rem;padding:1rem 1.25rem;margin:1rem 0}
+    h1,h2{line-height:1.15}.hazard{border-left:.45rem solid #a33}.safe{border-left:.45rem solid #28724f}.unknown{background:repeating-linear-gradient(135deg,#fff,#fff 8px,#edf0f3 8px,#edf0f3 16px)}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd3dc;padding:.5rem;text-align:left;vertical-align:top}code{background:#edf0f3;padding:.1rem .25rem}
+  </style>
+</head>
+<body>
+  <section data-sd-section="masthead"><h1>Architecture diagram</h1><p>Compact system-of-surfaces view. Rendered 2026-08-08. View of <code>skill-design.md</code> as of this timestamp; Markdown is the current source of truth and this view must be re-rendered after design changes.</p></section>
+  <section data-sd-section="thesis"><h2>Thesis</h2><p>Compile a semantic graph through seven executable, help-gated CLI leaves. Stable semantic and idempotency identities remain agent-owned; renderer fields remain server-owned.</p></section>
+  <section data-sd-section="invariant" class="safe"><h2>Prime invariant</h2><p>Graph meaning and the rendered board must agree. Accepted syntax or stored membership alone cannot prove correct direction, grouping, or hierarchy. Every non-empty semantic group must project to one server-owned, locked, unlabeled enclosure around exactly its members; that enclosure is not a public semantic entity or label target.</p></section>
+  <section data-sd-section="resources"><h2>Resource map</h2><table><tr><th>Surface</th><th>Status</th><th>Job</th></tr><tr><td>SKILL.md</td><td>Present</td><td>Thin runtime route</td></tr><tr><td>knowledge + references</td><td>Present</td><td>Graph grammar and semantic boundary</td></tr><tr><td>examples + evals</td><td>Present</td><td>Specimen, 5+5, wrong-neighbor, ablations</td></tr><tr><td>scripts + assets</td><td>Omitted</td><td>Avoid freezing raw payloads</td></tr></table></section>
+  <section data-sd-section="ledger"><h2>Epistemic ledger</h2><table><tr><th>Claim</th><th>Class</th></tr><tr><td>Seven public leaves map to five semantic operations.</td><td>Known from current source</td></tr><tr><td>Dual oracle catches valid-but-wrong topology.</td><td>Inferred; reversed-edge control</td></tr><tr><td>Non-empty groups render one locked, unlabeled enclosure.</td><td>Inferred pending final behavioral proof; membership-only rendering was independently rejected</td></tr><tr class="unknown"><td>Checked-in dist activates the route.</td><td>Known-negative — parent help only; future installed runtime requires direct probe</td></tr></table></section>
+  <section data-sd-section="signoff" class="hazard"><h2>Sign-off</h2><p>Current source and the rebuilt checkout expose all seven scene leaves. A fresh board may have no managed draft: only typed <code>whiteboard.draft-missing</code> permits one first idempotent mutation, whose receipt and immediate successful inspect prove initialization. After publication, <code>session url</code> mints the private review handoff without another event, revision, or session; <code>open</code> is not used as a review-link helper. Group enclosure behavior must still survive strict projection, replay, legacy-upgrade, rendered review, and fresh-agent proof. Registry installation, Claude/Cursor activation, rendered coherence, and human acceptance remain separate proof surfaces.</p></section>
+</body>
+</html>

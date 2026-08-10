@@ -135,6 +135,45 @@ export function getReceipt(
   return row ? (JSON.parse(row.response_json) as CommandResult) : null;
 }
 
+export function getReceiptRecord(
+  db: Db,
+  workspaceId: string,
+  idempotencyKey: string,
+): Readonly<{
+  response: CommandResult;
+  requestHash: string | null;
+  identityStatus: "verified" | "legacy-unverifiable" | "missing";
+}> | null {
+  const row = db
+    .prepare(
+      `SELECT r.response_json, h.request_hash, g.reason AS identity_gap
+       FROM command_receipts AS r
+       LEFT JOIN command_request_hashes AS h
+         ON h.workspace_id = r.workspace_id AND h.idempotency_key = r.idempotency_key
+       LEFT JOIN command_receipt_identity_gaps AS g
+         ON g.workspace_id = r.workspace_id AND g.idempotency_key = r.idempotency_key
+       WHERE r.workspace_id = ? AND r.idempotency_key = ?`,
+    )
+    .get(workspaceId, idempotencyKey) as
+    | {
+        response_json: string;
+        request_hash: string | null;
+        identity_gap: "legacy-request-identity-unverifiable" | null;
+      }
+    | undefined;
+  if (!row) return null;
+  return {
+    response: JSON.parse(row.response_json) as CommandResult,
+    requestHash: row.request_hash,
+    identityStatus:
+      row.request_hash !== null
+        ? "verified"
+        : row.identity_gap !== null
+          ? "legacy-unverifiable"
+          : "missing",
+  };
+}
+
 export function putReceipt(
   db: Db,
   workspaceId: string,
@@ -143,6 +182,7 @@ export function putReceipt(
   firstEventSeq: number | null,
   lastEventSeq: number | null,
   response: CommandResult,
+  requestHash: string,
   recordedAt: string,
 ): void {
   db.prepare(
@@ -159,4 +199,8 @@ export function putReceipt(
     JSON.stringify(response),
     recordedAt,
   );
+  db.prepare(
+    `INSERT INTO command_request_hashes (workspace_id, idempotency_key, request_hash)
+     VALUES (?, ?, ?)`,
+  ).run(workspaceId, idempotencyKey, requestHash);
 }

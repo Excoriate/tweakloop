@@ -1,0 +1,8 @@
+{
+  "protocol": "tweakloop.guide-projection-lock/v1",
+  "canonical": ".agents/AGENTS.md",
+  "canonicalSha256": "7d97d13e7418399e9f4c68abb4da4f04eed514ebbc5909f22d82a64bd026937c",
+  "agentsConsumer": "AGENTS.md",
+  "claudeConsumer": "CLAUDE.md",
+  "claudeTarget": "AGENTS.md"
+}

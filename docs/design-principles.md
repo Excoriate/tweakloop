@@ -18,7 +18,7 @@ Distilled from the authoritative architecture ([docs/architecture/](architecture
 
 7. **Protocols are data.** Commands, events, manifests, bridge messages, and evidence formats are versioned data schemas — never exported TypeScript classes.
 
-8. **No silent recovery.** Never silently retarget an annotation, discard feedback, overwrite a revision, steal active work, accept stale output, treat missing evidence as passing, linearize a branch, or report a dead agent as working. Ambiguity becomes visible state.
+8. **No silent recovery or authority promotion.** Never silently retarget an annotation, discard feedback, overwrite a revision, steal active work, accept stale output, treat missing evidence as passing, linearize a branch, report a dead agent as working, or turn a caller-supplied actor label into human/automation authority. Ambiguity becomes visible state; authority derives from the authenticated browser or a scoped capability holder.
 
 ## Domain coding constraints
 

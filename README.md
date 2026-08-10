@@ -1,143 +1,183 @@
+<div align="center">
+
 # Tweakloop
 
-> **Shape agent work. See what changed. Ship what you approved.**
+**Review agent-made plans, docs, and diagrams without losing the thread.**
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Node: >=24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)
-![Status: Phase 0](https://img.shields.io/badge/status-phase_0-orange.svg)
+Tweakloop is a local-first review workspace for developers using coding agents. Open HTML,
+Markdown, or Excalidraw in a browser, comment on the exact thing, let an agent publish a new
+immutable revision, then accept it or ask for another pass.
 
-Tweakloop is a **local-first control plane for human–agent artifact iteration** — an agent-native artifact IDE. Your coding agents produce plans, architectures, and documents; you review **immutable revisions** in a browser shell, express **typed intent** instead of re-typing prompts, and agents claim that work durably and return **versioned evidence**. Nothing is lost when a tab closes, a daemon restarts, or an agent crashes.
+[![CI](https://github.com/Excoriate/tweakloop/actions/workflows/ci.yml/badge.svg)](https://github.com/Excoriate/tweakloop/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f766e.svg)](LICENSE)
 
----
+</div>
 
-## Why Tweakloop?
-
-Most agent-review tools are *session-oriented*: one mutable HTML file, one browser session, free-form prompts — and when the loop breaks, your feedback, history, and approvals evaporate with it.
-
-Tweakloop is *workflow-oriented*. Its fundamental unit is:
-
-> **a versioned artifact contract + structured human intent + durable agent execution + verification evidence**
-
-| Session-oriented review | Tweakloop |
-|---|---|
-| One mutable HTML file | Immutable, replayable revisions |
-| Free-form prompt feedback | Typed intents (`replace`, `constrain`, `approve`, …) |
-| Agent long-polls a browser session | Agents claim durable work with leases |
-| "The agent says it's done" | Evidence, verification, and explicit human acceptance |
-| State dies with the session | Append-only fact log; every projection is rebuildable |
-
-Inspired by (and grateful to) [lavish-axi](https://github.com/kunchenguid/lavish-axi) — Tweakloop deliberately builds the missing layer *between* human judgment and agent execution rather than a better annotation overlay.
-
-## The loop
-
-```
-        you                                   your agents
-         │                                        │
-         ▼                                        ▼
- ┌───────────────┐    typed intents      ┌──────────────────┐
- │  review shell │ ────────────────────▶ │  claim work      │
- │  (browser)    │                       │  (lease, resume) │
- └───────┬───────┘                       └────────┬─────────┘
-         │              ┌──────────┐              │
-         └─────────────▶│ event    │◀─────────────┘
-        approve/reopen  │ log      │   new revision + evidence
-                        │ (SQLite) │
-                        └────┬─────┘
-                             │  SSE
-                             ▼
-                  every state is derived,
-                  ordered, and replayable
+```mermaid
+flowchart LR
+    A["Open<br/>immutable R1"] --> B["Review<br/>exact text or shape"]
+    B --> C["Claim<br/>agent-owned work"]
+    C --> D["Revise<br/>publish R2"]
+    D --> E["Decide<br/>accept or reopen"]
+    E -. "another pass" .-> B
 ```
 
-One daemon per workspace owns an append-only SQLite fact log. Humans and agents are both just actors submitting **command envelopes**; committed events stream back to every observer. Kill any process — browser, CLI, agent, daemon — and the workflow truth survives.
+Each comment, agent task, revision, and human decision stays connected in one durable local
+history. Live activity can disappear; committed workflow facts do not become mutable chat lore.
 
-## Quickstart
+## Try it locally
 
-**Prerequisites:** [Node.js ≥ 24](https://nodejs.org), [pnpm](https://pnpm.io), [just](https://github.com/casey/just)
+You need [Node.js 24+](https://nodejs.org/),
+[pnpm 10.12+](https://pnpm.io/installation), and
+[`just`](https://github.com/casey/just).
 
 ```bash
-git clone <this-repo> && cd tweakloop
-just install        # pnpm install
-just check          # build + tests + lint
+git clone https://github.com/Excoriate/tweakloop.git
+cd tweakloop
+pnpm install --frozen-lockfile
 just open examples/plan.html
 ```
 
-`just open` starts the workspace daemon (if needed), registers the artifact as a durable identity, and prints a **one-time bootstrap URL** that opens the authenticated review shell in your browser.
+Tweakloop builds the project, starts a workspace-local daemon, snapshots the example as an
+immutable revision, and opens a one-time authenticated review URL. You should see the document,
+its revision selector, Comment mode, and the collaboration rail.
 
-Day-to-day:
-
-```bash
-just dev            # run the daemon in the foreground
-just status         # daemon health + workspace projections
-just events         # inspect the committed event log
-just stop           # stop this workspace's daemon
-```
-
-Prefer the raw CLI? Everything is also available as `tweak` (or `node dist/cli/index.js` / `pnpm tweak` before it's linked):
+On a headless host—or anywhere the platform browser opener is unavailable—replace the last line
+with:
 
 ```bash
-tweak init                          # project identity (.tweakloop/project.json)
-tweak open examples/plan.html       # register + open (add --no-browser to just print the URL)
-tweak status --json                 # machine-readable output on stdout
-tweak artifacts list
-tweak events list --after 0
-tweak daemon start --foreground
-tweak daemon stop
+just build
+node dist/cli/index.js open examples/plan.html --no-browser
 ```
 
-Every command supports `--json` — one documented JSON value on stdout, diagnostics on stderr. Agents integrate through this CLI protocol; there are no agent-specific code paths.
+Open the printed URL yourself. The source-checkout route is the supported starting point while
+registry publication remains unverified.
 
-## Status: Phase 0 (honest edition)
+## Why Tweakloop
 
-This is the **architecture skeleton** — deliberately small, deliberately solid. What works today:
+- **Revisions, not a mutable preview.** Every publication is an immutable value with explicit
+  ancestry. A prior result remains reviewable after the source file changes.
+- **Feedback becomes work.** A comment can stay conversational or become typed, claimable work
+  tied to the exact artifact and revision that produced it.
+- **Agents are interchangeable.** Codex, Claude Code, Cursor, OpenCode, or any process that can
+  invoke a CLI can use the same versioned protocol. Tweakloop does not host or special-case a
+  model.
+- **“Done” is not “accepted.”** Agent activity, claimed work, a returned revision, readiness for
+  review, and the human decision remain separate facts.
 
-- ✅ One daemon per workspace: runtime discovery, dynamic loopback ports, health + start-nonce
-- ✅ Append-only **SQLite fact log** (STRICT tables, WAL) behind a single serialized transactor
-- ✅ **Command envelopes** with JSON Schema validation, idempotency receipts, optimistic stream versions
-- ✅ Pure domain core (`decide`/`evolve`) with zero I/O — fully table-testable
-- ✅ Rebuildable **projections** + live **SSE** event stream
-- ✅ Bootstrap-token-authenticated **browser shell** (artifact catalog, live timeline)
-- ✅ `tweak` CLI with machine-readable output
+## How the loop works
 
-What's designed but not yet built (see [docs/architecture/](docs/architecture/)):
+1. **Open.** Tweakloop registers the artifact and publishes its bytes as revision R1.
+2. **Review.** You select an exact section, paragraph, or whiteboard element and describe the
+   required change, constraint, or decision.
+3. **Claim.** The assigned agent receives that precise work and claims it durably. Retries and
+   handoffs cannot silently create a second owner.
+4. **Revise.** The agent publishes R2 as a child of R1 and reports what it addressed.
+5. **Decide.** You compare the result and accept it or reopen the work for another pass.
 
-| Phase | Delivers | Status |
+Tweakloop coordinates and records this review loop. It does not execute arbitrary repository
+changes, host a model, replace Git, provide cloud sync, or promote an agent's completion to human
+acceptance.
+
+## What you can review
+
+| Artifact | What Tweakloop preserves | Start here |
 |---|---|---|
-| 0 — Skeleton | Fact log, transactor, projections, daemon, CLI, shell | ✅ done |
-| 1 — Immutable revisions | Content-addressed store, revision manifests, isolated artifact origin | 🔜 next |
-| 2 — Semantic feedback | Bridge, interaction modes, typed intents, anchors, orphan detection | 📐 designed |
-| 3 — Agent work protocol | Atomic claims, leases, `tweak work claim --wait`, results | 📐 designed |
-| 4 — Diff, evidence, decisions | Semantic diff, evidence objects, accept/reopen, timeline | 📐 designed |
-| 5 — Markdown + OSS hardening | Source-mapped Markdown adapter, agent skills, installers | 📐 designed |
+| HTML | semantic anchors, interactive rendering, immutable revisions | [`examples/plan.html`](examples/plan.html) |
+| Markdown | heading ancestry, stable block anchors, safe rendering | [`examples/markdown-collaboration.md`](examples/markdown-collaboration.md) |
+| Excalidraw | semantic nodes, edges, groups, managed drafts, immutable publication | [`examples/engineering-whiteboard.excalidraw`](examples/engineering-whiteboard.excalidraw) |
 
-## Design principles
+HTML plans can also embed managed whiteboards. The browser keeps Documents, Tasks, Comments, and
+Chat in one session instead of scattering the review across unrelated tools.
 
-The architecture is [Rich Hickey-inspired](docs/design-principles.md), without the cargo cult:
+## Connect your coding agent
 
-- **Values over mutable places** — revisions, intents, and evidence are immutable facts; supersede, never rewrite
-- **Current state is derived** — every projection rebuilds from the event log, deterministically
-- **Identity is not location** — file paths, DOM selectors, ports, and PIDs are locators, not identities
-- **Effects at the edges** — the domain core touches no filesystem, network, clock, or randomness
-- **Agents are external actors** — any process that can invoke a stable CLI can participate
+Tweakloop ships a public agent skill with the complete safe workflow: open, inspect, claim, revise,
+publish, complete, and hand the result back for a human decision.
 
-The full, normative design lives in [docs/architecture/](docs/architecture/) — fifteen readable chapters, cross-checked against this codebase.
+```bash
+npx skills add Excoriate/tweakloop --skill tweakloop
+```
 
-## Documentation
+Then ask your agent:
 
-| | |
-|---|---|
-| [docs/README.md](docs/README.md) | Documentation index and reading order |
-| [docs/product-vision.md](docs/product-vision.md) | Why Tweakloop exists, and what would falsify it |
-| [docs/prd.md](docs/prd.md) | Product requirements and the v0.1 vertical slice |
-| [docs/design-principles.md](docs/design-principles.md) | The non-negotiable design laws |
-| [docs/ubiquitous-language.md](docs/ubiquitous-language.md) | The shared vocabulary (DDD) |
-| [docs/architecture/](docs/architecture/) | The authoritative architecture, chapter by chapter |
-| [docs/adr/](docs/adr/) | Architecture decision records |
+> Use the Tweakloop skill to draft a plan for this change, open it for my review, address the
+> feedback I submit, and return the revised artifact for acceptance.
+
+The canonical public workflow is
+[`.agents/skills/tweakloop/SKILL.md`](.agents/skills/tweakloop/SKILL.md); its installable copy is
+[`skills/tweakloop/SKILL.md`](skills/tweakloop/SKILL.md). Both are standalone—personal workflow
+harnesses are not shipped or required. For direct automation and output contracts, use the
+[complete CLI reference](docs/cli-reference.md).
+
+## Local-first by design
+
+- One daemon owns one workspace and binds to loopback only.
+- The review shell and untrusted artifact content run on separate origins; artifact content gets
+  no shell credential or mutation route.
+- SQLite stores an append-only event log, while immutable bytes live in a content-addressed object
+  store. Current views are rebuildable projections.
+- Human comments, default-human chat, accept, and reopen derive authority from the authenticated
+  browser. CLI callers cannot label themselves human to bypass that boundary.
+- The trust boundary is the local OS user. Tweakloop does not claim isolation from a hostile
+  same-user process that can read another client's private files or memory.
+
+See the [security policy](SECURITY.md),
+[failure model](docs/architecture/14-failure-and-testing.md), and
+[design laws](docs/design-principles.md) for the full contract.
+
+## Project status
+
+Tweakloop is **v0.1 alpha**. The core review loop runs end to end for HTML, Markdown, and
+Excalidraw, including typed feedback, atomic agent claims, immutable child revisions, live browser
+updates, and explicit human accept/reopen. The Chromium end-to-end suite exercises that loop, and
+the CI workflow requires the suite on every pull request and `main` push.
+
+Current boundaries matter:
+
+- first-class evidence objects and verification records are not implemented yet; completion
+  summaries, semantic checks, diffs, and human decisions are available today;
+- automatic cross-revision anchor re-resolution and explicit orphan facts remain incomplete;
+- owned-daemon restart and recovery paths are exercised, but arbitrary SIGKILL, power-loss, and
+  cross-platform crash consistency are not claimed;
+- Chromium is the primary browser test target; Firefox, WebKit, and screen-reader verification are
+  still open.
+
+The exact docs-to-code ledger lives in
+[`docs/architecture/16-implementation-status.md`](docs/architecture/16-implementation-status.md).
 
 ## Contributing
 
-Early days — issues and PRs welcome. The bar: `just check` must pass, and changes must respect the [design laws](docs/architecture/02-design-laws.md). If a change contradicts the architecture docs, the docs get amended first (or the change is wrong).
+Tweakloop keeps the domain small by making durable facts, identities, authority, and failure paths
+explicit. Before modeling new behavior, read the
+[design principles](docs/design-principles.md) and
+[ubiquitous language](docs/ubiquitous-language.md).
+
+```bash
+pnpm install --frozen-lockfile
+pnpm exec playwright install --with-deps chromium
+just check e2e
+```
+
+That is the product-owned verification graph the CI workflow invokes: build, guide/skill/hook
+projection parity, the OSS test suite, formatting/lint checks, and the real-browser loop. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for test and architecture expectations, and use
+[GitHub Security Advisories](SECURITY.md#reporting-a-vulnerability) for private vulnerability
+reports.
+
+## Documentation
+
+- [Start with the documentation map](docs/README.md)
+- [Understand the product and non-goals](docs/prd.md)
+- [Use the complete CLI reference](docs/cli-reference.md)
+- [Read the architecture](docs/architecture/README.md)
+
+## Acknowledgements
+
+Tweakloop was partly inspired by [Lavish AXI](https://github.com/kunchenguid/lavish-axi), which
+made precise feedback on agent-generated HTML feel immediate. Tweakloop extends that idea into a
+durable, agent-neutral review workflow with immutable revisions and explicit human decisions.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Alex Torres Ruiz.

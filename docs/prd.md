@@ -59,7 +59,7 @@ From [architecture/15-roadmap.md](architecture/15-roadmap.md) §31. Each phase h
 | 2 — Semantic feedback | Bridge, three interaction modes, semantic-node discovery, text/source anchors, drafts, review-batch submission, typed intents, orphan detection | Feedback stays valid across a controlled revision change or becomes explicitly orphaned |
 | 3 — Agent-neutral work protocol | Work projection, atomic claims, leases, CLI machine output, result recording, revision publication from claimed work, crash/retry handling | Two concurrent fake agents cannot claim the same work; abandoned work recovers |
 | 4 — Diff, evidence and decisions | Semantic diff, rendered-text diff, evidence objects, verification records, accept/reject/reopen decisions, timeline | The full vertical slice passes browser, crash and concurrency tests |
-| 5 — Markdown adapter and OSS hardening | Markdown ingestion with source mapping and stable heading identity, installer, agent-harness skills, protocol docs, contribution fixtures, repair commands | A Markdown plan and an interactive HTML architecture use the same intent/work/evidence model |
+| 5 — Markdown adapter and OSS hardening | Markdown ingestion with source mapping and stable heading identity, installer, portable agent skills, protocol docs, contribution fixtures, repair commands | A Markdown plan and an interactive HTML architecture use the same intent/work/evidence model |
 
 ## Non-goals
 

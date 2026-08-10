@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Diagram for Tweakloop"
+  short_description: "Build editable topology through semantic scene commands"
+  default_prompt: "Use $architecture-diagram to build this basic architecture in Tweakloop without raw Excalidraw JSON."

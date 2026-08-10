@@ -1,0 +1,4 @@
+interface:
+  display_name: "Excalidraw for Tweakloop"
+  short_description: "Edit Tweakloop boards without losing identity"
+  default_prompt: "Use $excalidraw to diagram this in a Tweakloop whiteboard."

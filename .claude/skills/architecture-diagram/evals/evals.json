@@ -1,0 +1,30 @@
+{
+  "skill": "architecture-diagram",
+  "purpose": "Discriminate graph-first semantic scene work from wrong-neighbor routing and valid-but-wrong topology.",
+  "scenarios": [
+    {
+      "id": "basic-topology",
+      "prompt": "Create an editable Tweakloop diagram where the browser calls the API and the API reads the database.",
+      "base_model_fails": "Invents raw element JSON or renderer fields, or omits the capability probe.",
+      "skill_passes_when": "Probes runtime help for all seven leaves, uses complete commands with stable semantic and idempotency identities, inspects before and after, lays out once, publishes, and requires human review.",
+      "discriminating_observable": "An operation-name-only answer fails because it omits executable arguments/options and the inspect-to-publish lifecycle; stale help stops mutation.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "wrong-neighbor-freehand",
+      "prompt": "Make this existing hand-drawn whiteboard pixel-perfect and add a mascot.",
+      "base_model_fails": "Uses semantic architecture operations for a freeform native edit.",
+      "skill_passes_when": "Routes to Excalidraw only if a native editor is controllable.",
+      "discriminating_observable": "Architecture-diagram performs no scene mutation for the freehand request.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "reversed-edge-control",
+      "prompt": "Verify an accepted scene whose API/database edge direction may be reversed.",
+      "base_model_fails": "Treats an accepted receipt and attractive render as topology correctness.",
+      "skill_passes_when": "Reads source, meaning, and target aloud and rejects the reversed dependency.",
+      "discriminating_observable": "The valid scene fails the coherence oracle when edge direction changes.",
+      "baseline_expected": "fail"
+    }
+  ]
+}

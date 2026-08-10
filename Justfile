@@ -14,7 +14,7 @@ install:
 build:
     pnpm build
 
-# run the full test suite once
+# run the public product/OSS test suite once
 test:
     pnpm test
 
@@ -30,8 +30,12 @@ lint:
 format:
     pnpm format
 
-# everything CI runs: build, tests, lint
-check: build test lint
+# browser end-to-end tests (Playwright)
+e2e: build
+    pnpm e2e
+
+# everything CI runs: build, OSS guide/skill/hook projection parity, product tests, lint
+check: build check-guides check-skills check-hooks test lint
 
 # run the workspace daemon in the foreground (logs to stderr)
 dev: build
@@ -56,3 +60,27 @@ events after="0": build
 # remove build output
 clean:
     rm -rf dist
+
+# replace root agent-guide consumers from the canonical product-owned guide
+sync-guides:
+    node scripts/sync-guides.mjs
+
+# verify root agent-guide consumers without contributor-specific tooling
+check-guides:
+    node scripts/sync-guides.mjs --check
+
+# replace repository-local discovery copies from the complete canonical skills
+sync-skills:
+    node scripts/sync-skills.mjs
+
+# verify OSS skill projections without requiring or mutating the optional private harness
+check-skills:
+    node scripts/sync-skills.mjs --check
+
+# replace the package-facing public native-hook projection from its canonical source
+sync-hooks:
+    node scripts/sync-hooks.mjs
+
+# verify public native-hook projection parity without activating any native client config
+check-hooks:
+    node scripts/sync-hooks.mjs --check

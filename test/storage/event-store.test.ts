@@ -64,7 +64,17 @@ describe("event store", () => {
       lastEventSeq: 1,
       response: { artifactId: "artifact_1" },
     };
-    putReceipt(db, WS, "key-1", "cmd-1", 1, 1, response, "2026-08-03T00:00:00.000Z");
+    putReceipt(
+      db,
+      WS,
+      "key-1",
+      "cmd-1",
+      1,
+      1,
+      response,
+      "1".repeat(64),
+      "2026-08-03T00:00:00.000Z",
+    );
     expect(getReceipt(db, WS, "key-1")).toEqual(response);
   });
 });

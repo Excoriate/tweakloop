@@ -4,34 +4,359 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tweakloop</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101828'/%3E%3Cpath d='M11 9h10v4h-3v10h-4V13h-3z' fill='white'/%3E%3C/svg%3E">
+<script>
+document.documentElement.dataset.theme =
+  localStorage.getItem("tweakloop-theme") === "dark" ? "dark" : "light";
+</script>
 <link rel="stylesheet" href="/app/shell.css">
 </head>
-<body>
-<header>
-  <h1>tweakloop</h1>
-  <span id="connection" class="badge badge-wait">connecting…</span>
+<body id="tweakloop-shell">
+<header class="toolbar">
+  <div class="brand" title="Tweakloop — live artifact review">
+    <span class="brand-mark" aria-hidden="true">t</span>
+    <div>
+      <h1>tweakloop</h1>
+      <span class="brand-subtitle">human × agent review</span>
+    </div>
+  </div>
+
+  <!-- Kept as a compatibility surface; Documents is the primary switcher. -->
+  <select id="artifact-select" class="artifact-select" aria-label="Artifact" disabled hidden></select>
+
+  <div id="artifact-toolbar" class="toolbar-center" hidden>
+    <div class="tool-group revision-tools">
+      <span class="tool-label">Revision</span>
+      <select id="revision-select" data-testid="revision-select" aria-label="Revision" disabled></select>
+      <button id="restore-revision" data-testid="restore-revision" type="button" class="icon-btn"
+        aria-label="Restore this revision as head" title="Restore this revision as head" hidden>↩</button>
+    </div>
+    <fieldset class="tool-group segmented" aria-label="Viewer mode">
+      <button id="mode-interact" type="button" disabled>Interact</button>
+      <button id="mode-toggle" data-testid="mode-toggle" type="button" disabled>Comment</button>
+    </fieldset>
+    <button id="publish-whiteboard" data-testid="publish-whiteboard" type="button" class="small"
+      title="Publish the live draft as an immutable whiteboard revision" hidden>Publish board</button>
+    <button id="viewer-expand" data-testid="viewer-expand" type="button" class="icon-btn canvas-control"
+      aria-label="Expand canvas" aria-pressed="false" title="Expand canvas">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M4 12h16m-5-5 5 5-5 5" /></svg>
+    </button>
+    <button id="viewer-fullscreen" data-testid="viewer-fullscreen" type="button" class="icon-btn"
+      aria-label="Enter artifact fullscreen" title="Enter artifact fullscreen" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5m13 5h5v-5" /></svg>
+    </button>
+  </div>
+
+  <div class="toolbar-status">
+    <span class="status-label">Workspace</span>
+    <span id="connection" data-testid="connection" class="badge badge-wait" aria-live="polite">connecting…</span>
+  </div>
+  <button id="workspace-export" data-testid="workspace-export" type="button" class="workspace-export"
+    aria-describedby="workspace-export-status" title="Save a verified workspace copy">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 18.5h14" /></svg>
+    <span>Save workspace</span>
+  </button>
+  <span id="workspace-export-status" class="workspace-export-status" role="status"
+    aria-live="polite"></span>
+  <button id="theme-toggle" data-testid="theme-toggle" type="button" class="icon-btn"
+    aria-label="Toggle color theme" title="Toggle color theme">☾</button>
 </header>
+<p id="workspace" class="workspace"></p>
 
-<section id="workspace" class="workspace"></section>
+<main id="workspace-shell" data-testid="workspace-shell" class="workspace-shell">
+  <aside id="outline-rail" data-testid="outline-rail" class="documents-rail" aria-label="Documents">
+    <div class="documents-head">
+      <div>
+        <span class="eyebrow">Workspace</span>
+        <h2>Documents</h2>
+      </div>
+      <div class="documents-actions">
+        <details id="document-add" class="document-add" hidden>
+          <summary data-testid="document-add">Add</summary>
+          <div class="document-add-menu">
+            <button id="document-open-files" type="button">Open files</button>
+            <button id="document-new-whiteboard" type="button">New whiteboard</button>
+          </div>
+        </details>
+        <button id="outline-collapse" type="button" class="icon-btn" aria-label="Collapse documents"
+          title="Collapse documents">«</button>
+      </div>
+    </div>
+    <ul id="artifact-list" class="artifact-list"></ul>
+    <p id="documents-empty" class="documents-empty">No documents yet</p>
+    <div id="active-outline" class="active-outline">
+      <p class="outline-caption">In this document</p>
+      <ul id="outline-list" class="outline-list"></ul>
+      <p id="outline-empty" class="empty outline-empty">Sections appear once this document loads.</p>
+    </div>
+  </aside>
 
-<main>
-  <section class="panel">
-    <h2>Artifacts</h2>
-    <table id="artifacts" hidden>
-      <thead><tr><th>Name</th><th>Format</th><th>Artifact ID</th><th>Source</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p id="artifacts-empty" class="empty">
-      No artifacts yet. Register one with <code>tweak open &lt;path&gt;</code>.
-    </p>
+  <section class="viewer-pane" aria-label="Artifact viewer">
+    <p id="viewer-flash" class="flash viewer-flash" role="status" hidden></p>
+    <div id="viewer-body" class="viewer-body" aria-busy="false">
+      <div id="viewer-transition" class="viewer-transition" role="status" aria-live="polite" hidden></div>
+      <iframe id="viewer-frame" data-testid="viewer-frame" title="Artifact revision"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+        referrerpolicy="no-referrer" hidden></iframe>
+      <section id="start-surface" data-testid="start-surface" class="start-surface"
+        aria-labelledby="start-title" hidden>
+        <div class="start-intro">
+          <span class="start-kicker">Start</span>
+          <h2 id="start-title">What do you want to work on?</h2>
+          <p>Open something you have, continue a saved workspace, or start from a blank canvas.</p>
+          <p id="start-agent-assurance" class="start-agent-assurance"></p>
+        </div>
+        <fieldset class="start-actions">
+          <legend class="sr-only">Start actions</legend>
+          <button id="start-open-files" data-testid="start-open-files" class="start-action" type="button">
+            <span class="start-action-mark start-action-files" aria-hidden="true">↗</span>
+            <strong>Open files</strong>
+            <span>Add HTML, Markdown, or Excalidraw files to this workspace.</span>
+          </button>
+          <button id="start-open-workspace" data-testid="start-open-workspace" class="start-action" type="button">
+            <span class="start-action-mark start-action-workspace" aria-hidden="true">⌂</span>
+            <strong>Open a workspace</strong>
+            <span>Continue a saved Tweakloop workspace with its documents and history.</span>
+          </button>
+          <button id="start-new-whiteboard" data-testid="start-new-whiteboard" class="start-action" type="button">
+            <span class="start-action-mark start-action-board" aria-hidden="true">✦</span>
+            <strong>New whiteboard</strong>
+            <span>Start with a blank canvas and sketch with your agent.</span>
+          </button>
+        </fieldset>
+        <p class="start-supported">Supported: HTML, Markdown, and Excalidraw. Files stay in this local Tweakloop workspace.</p>
+      </section>
+      <p id="viewer-empty" class="empty">Loading workspace…</p>
+      <div id="onboarding-progress" class="onboarding-progress" aria-live="off" hidden>
+        <div class="onboarding-progress-head">
+          <div>
+            <span class="eyebrow">Workspace activity</span>
+            <strong id="onboarding-progress-title"></strong>
+          </div>
+          <button id="onboarding-dismiss" type="button" class="ghost" hidden>Dismiss</button>
+        </div>
+        <ol id="onboarding-results" class="onboarding-results"></ol>
+        <div id="onboarding-recovery" class="onboarding-recovery" hidden></div>
+      </div>
+    </div>
+
+    <section id="draft-form" data-testid="draft-form" class="selection-composer" aria-labelledby="selection-composer-title" hidden>
+      <div class="selection-composer-head">
+        <div>
+          <span class="eyebrow">Selected section</span>
+          <h2 id="selection-composer-title">Comment to agent</h2>
+        </div>
+        <button id="draft-cancel" data-testid="draft-cancel" type="button"
+          class="ghost small composer-cancel" aria-label="Cancel comment and close composer">
+          Cancel
+        </button>
+      </div>
+      <p id="draft-target" class="draft-target"></p>
+      <label class="field composer-field">
+        <span id="draft-text-caption">Comment</span>
+        <textarea id="draft-text" data-testid="draft-text" rows="4"
+          placeholder="What should your agent know or change?"></textarea>
+      </label>
+      <details class="advanced-intent">
+        <summary>Intent options</summary>
+        <div class="advanced-intent-fields">
+          <label class="field">
+            <span>Intent</span>
+            <select id="draft-intent-type" data-testid="draft-intent-type">
+              <option value="comment">comment</option>
+              <option value="question">question</option>
+              <option value="replace-text">replace-text</option>
+              <option value="add-constraint">add-constraint</option>
+            </select>
+          </label>
+          <label class="field" id="draft-rationale-field" hidden>
+            <span>Rationale (optional)</span>
+            <input id="draft-rationale" type="text">
+          </label>
+        </div>
+      </details>
+      <div class="composer-actions">
+        <button id="draft-add" data-testid="draft-add" type="button" class="ghost">Add to review</button>
+        <button id="draft-send" data-testid="draft-send" type="button" class="primary-action">
+          Queue comment <span class="shortcut" aria-hidden="true">⌘↵</span>
+        </button>
+      </div>
+    </section>
+
+    <p id="nodes-note" class="nodes-note"></p>
   </section>
 
-  <section class="panel">
-    <h2>Timeline</h2>
-    <ol id="timeline" class="timeline"></ol>
-    <p id="timeline-empty" class="empty">No events yet.</p>
-  </section>
+  <aside id="agent-rail" class="side-pane" aria-label="Agent collaboration">
+    <button id="agent-sheet-toggle" class="agent-sheet-handle" type="button" aria-expanded="false"
+      aria-controls="agent-rail-content">
+      <span id="agent-sheet-mark" data-testid="agent-sheet-mark" class="agent-orb" aria-hidden="true">
+        <svg class="sparkle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c.7 6.1 3.9 9.3 10 10-6.1.7-9.3 3.9-10 10-.7-6.1-3.9-9.3-10-10 6.1-.7 9.3-3.9 10-10Z" /></svg>
+      </span>
+      <span id="agent-sheet-summary">Agent · no open tasks</span>
+      <span class="sheet-chevron" aria-hidden="true">⌃</span>
+    </button>
+
+    <div id="agent-rail-content" class="agent-rail-content">
+      <header class="agent-header">
+        <div class="agent-identity">
+          <span id="agent-header-mark" data-testid="agent-header-mark" class="agent-orb" aria-hidden="true">
+            <svg class="sparkle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c.7 6.1 3.9 9.3 10 10-6.1.7-9.3 3.9-10 10-.7-6.1-3.9-9.3-10-10 6.1-.7 9.3-3.9 10-10Z" /></svg>
+          </span>
+          <div>
+            <span class="eyebrow">Your collaborator</span>
+            <h2 id="agent-name">Agent</h2>
+          </div>
+          <span id="agent-status" class="badge badge-wait" aria-live="polite">Offline</span>
+          <button id="notifications-toggle" data-testid="notifications-toggle" type="button"
+            class="icon-btn notifications-toggle" aria-label="Enable revision-ready notifications"
+            aria-pressed="false" aria-describedby="notifications-status"
+            title="Notify me when agent work is ready for review">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+          </button>
+          <span id="notifications-status" class="notifications-status" role="status"
+            aria-live="polite" hidden></span>
+          <button id="agent-collapse" type="button" class="icon-btn agent-collapse"
+            aria-label="Collapse collaboration" aria-expanded="true" title="Collapse collaboration">»</button>
+        </div>
+        <div id="chat-presence" data-testid="chat-presence" class="chat-presence" hidden></div>
+        <section class="dynamic-taskbar" aria-label="Dynamic tasks summary">
+          <div>
+            <span class="taskbar-label">Now</span>
+            <strong id="taskbar-current">Waiting for a comment</strong>
+          </div>
+          <div class="taskbar-metrics">
+            <span title="Comments not sent to the agent yet"><strong id="taskbar-drafts">0</strong> unsent</span>
+            <span title="Submitted comments waiting on work"><strong id="taskbar-open">0</strong> open</span>
+            <span title="Agent work waiting for your decision"><strong id="taskbar-addressed">0</strong> ready</span>
+          </div>
+        </section>
+      </header>
+
+      <div class="tabs collaboration-nav" aria-label="Collaboration views" role="tablist">
+        <button id="rail-tab-work" type="button" role="tab" aria-selected="false"
+          aria-controls="section-work" tabindex="-1" data-testid="rail-tab-work" data-tab="work">Tasks</button>
+        <button id="rail-tab-feedback" type="button" role="tab" aria-selected="false"
+          aria-controls="section-feedback" tabindex="-1" data-testid="rail-tab-feedback" data-tab="feedback">Comments</button>
+        <button id="rail-tab-chat" type="button" role="tab" aria-selected="true"
+          aria-controls="section-chat" tabindex="0" data-testid="rail-tab-chat" data-tab="chat">Chat</button>
+        <span id="chat-count" class="sr-only">0</span>
+        <button id="chat-expand" data-testid="chat-expand" class="chat-expand" type="button"
+          aria-label="Expand Chat" aria-pressed="false" title="Expand Chat">↗</button>
+      </div>
+
+      <div id="collaboration-stack" class="collaboration-stack">
+        <section id="section-work" class="collab-section tasks-section" role="tabpanel"
+          data-panel="work" aria-labelledby="rail-tab-work">
+          <button id="tasks-heading" data-testid="tab-work" class="section-heading" type="button" data-focus-section="work">
+            <span><span class="section-icon" aria-hidden="true">✓</span> Live tasks</span>
+            <span id="tasks-count" class="section-count">0</span>
+          </button>
+          <div class="section-content tasks-content">
+            <p id="tasks-summary" class="meta tasks-summary" hidden></p>
+            <ul id="work-list" class="item-list"></ul>
+            <p id="work-empty" class="empty quiet-empty">No work queued — comments become tasks when sent.</p>
+          </div>
+          <details id="section-timeline" class="activity-details">
+            <summary data-testid="tab-timeline">Activity details</summary>
+            <ol id="timeline" class="timeline"></ol>
+            <p id="timeline-empty" class="empty quiet-empty">No activity yet.</p>
+          </details>
+        </section>
+
+        <section id="section-feedback" class="collab-section comments-section" role="tabpanel"
+          data-panel="feedback" aria-labelledby="rail-tab-feedback">
+          <button id="comments-heading" data-testid="tab-feedback" class="section-heading" type="button" data-focus-section="feedback">
+            <span><span class="section-icon" aria-hidden="true">◍</span> Comments</span>
+            <span id="comments-count" class="section-count">0</span>
+          </button>
+          <div class="section-content">
+            <div id="local-review-queue" class="local-review-queue" hidden>
+              <div class="local-review-heading">
+                <span><strong id="drafts-count">0</strong> unsent</span>
+                <span id="drafts-context" class="meta"></span>
+              </div>
+              <ul id="draft-list" class="item-list"></ul>
+              <p id="drafts-empty" class="empty quiet-empty" hidden></p>
+              <button id="submit-review" data-testid="submit-review" type="button" disabled>Send all comments</button>
+              <p id="flash" class="flash" role="status" hidden></p>
+            </div>
+            <ul id="intent-list" class="item-list"></ul>
+            <p id="feedback-empty" class="empty">Select a section in Comment mode to comment.</p>
+            <details id="comment-history" class="comment-history">
+              <summary><span>Comment history</span><span id="resolved-comments-count" class="section-count">0</span></summary>
+              <ul id="resolved-intent-list" class="item-list"></ul>
+              <p id="resolved-comments-empty" class="empty quiet-empty">No resolved comments yet.</p>
+            </details>
+          </div>
+        </section>
+
+      </div>
+
+      <section id="section-chat" class="collab-section chat-section" role="tabpanel"
+        data-panel="chat" aria-labelledby="rail-tab-chat">
+        <div class="section-content chat-content">
+          <ul id="chat-list" class="chat-list" aria-label="Conversation with your agent" role="log"
+            aria-live="polite" aria-relevant="additions text"></ul>
+          <div id="chat-empty" class="empty chat-empty-state">
+            <span class="chat-empty-mark" aria-hidden="true">↗</span>
+            <strong>Work together in real time</strong>
+            <span>Message your agent, attach a document with <kbd>@</kbd>, or send current comments.</span>
+          </div>
+          <div class="chat-composer-shell">
+            <div id="chat-context" data-testid="chat-context" class="chat-context" hidden></div>
+            <div id="chat-mentions" class="chat-mentions" hidden></div>
+            <div id="chat-attachments" data-testid="chat-attachments" class="chat-attachments"
+              aria-live="polite" hidden></div>
+            <div class="chat-composer-wrap">
+              <div class="chat-composer">
+                <button id="chat-attach" data-testid="chat-attach" type="button" class="chat-attach"
+                  aria-label="Attach files" title="Attach files">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 12.5 5.8-5.8a3 3 0 0 1 4.2 4.2l-7.9 7.9a5 5 0 0 1-7.1-7.1l8-8" /></svg>
+                </button>
+                <input id="chat-file-input" data-testid="chat-file-input" type="file" multiple hidden>
+                <textarea id="chat-input" data-testid="chat-input" rows="1"
+                  placeholder="Message your agent… Type @ to add context" aria-label="Message the agent"
+                  role="combobox" aria-autocomplete="list" aria-controls="chat-mention-list"
+                  aria-expanded="false" autocomplete="off"></textarea>
+                <button id="chat-send" data-testid="chat-send" type="button" aria-label="Send message"
+                  aria-describedby="chat-send-requirement chat-composer-hint" disabled>↑</button>
+              </div>
+              <div id="chat-mention-list" data-testid="chat-mention-list" class="mention-list" role="listbox"
+                aria-label="Attach workspace context" hidden></div>
+            </div>
+            <p id="chat-composer-hint" class="chat-composer-hint"><span id="chat-send-requirement">Write a message or add context to enable Send.</span><span aria-hidden="true">·</span><span>Shift+Enter new line</span><span aria-hidden="true">·</span><span><kbd>@</kbd> add context</span></p>
+            <p id="chat-flash" class="flash" role="status" hidden></p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
 </main>
+
+<dialog id="decision-dialog" class="decision-dialog" aria-labelledby="decision-dialog-title">
+  <form method="dialog" class="decision-dialog-card">
+    <div class="decision-dialog-mark" aria-hidden="true">↻</div>
+    <div>
+      <span class="eyebrow">Continue the loop</span>
+      <h2 id="decision-dialog-title">Request another pass</h2>
+      <p id="decision-dialog-context" class="decision-dialog-context">Tell the agent what still needs work, or retry the original task unchanged.</p>
+    </div>
+    <label for="decision-reason">What should change?</label>
+    <textarea id="decision-reason" data-testid="decision-reason" rows="3"
+      placeholder="Be specific enough that the agent can act without another question."></textarea>
+    <div class="decision-dialog-actions">
+      <button id="decision-cancel" type="button" class="ghost">Cancel</button>
+      <button id="decision-retry" data-testid="decision-retry" type="button" class="ghost">Retry original task</button>
+      <button id="decision-submit" data-testid="decision-submit" type="button" disabled>Send feedback</button>
+    </div>
+  </form>
+</dialog>
+
+<input id="artifact-file-input" data-testid="artifact-file-input" type="file" multiple
+  accept=".html,.htm,.md,.markdown,.excalidraw,text/html,text/markdown,application/json" hidden>
+<input id="workspace-directory-input" data-testid="workspace-directory-input" type="file"
+  webkitdirectory directory multiple hidden>
+<span id="onboarding-live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 
 <script src="/app/shell.js"></script>
 </body>

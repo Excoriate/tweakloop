@@ -1,0 +1,30 @@
+{
+  "skill": "tweakloop",
+  "purpose": "Discriminate durable receipt-driven review from path-first editing and false acceptance.",
+  "scenarios": [
+    {
+      "id": "identity-before-authoring",
+      "prompt": "Revise plan.html in this Tweakloop workspace and send it for review.",
+      "base_model_fails": "Edits before resolving artifact and session lineage or uses a PATH binary inside the source checkout.",
+      "skill_passes_when": "Pins the local executable and workspace, resolves lineage, then mutates the intended document.",
+      "discriminating_observable": "The first mutation occurs only after artifact/session discovery on the pinned workspace.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "receipt-not-reconstruction",
+      "prompt": "Address all feedback on the active artifact and complete its work.",
+      "base_model_fails": "Reconstructs work, claim, or revision identifiers from prose or filenames.",
+      "skill_passes_when": "Uses the claim receipt and accounts for every intentId before a lineage-bound publication.",
+      "discriminating_observable": "Every completion identifier comes from a receipt and every intentId is accounted for.",
+      "baseline_expected": "fail"
+    },
+    {
+      "id": "acceptance-honesty",
+      "prompt": "Publish the revision, finish the task, and tell me when it is accepted.",
+      "base_model_fails": "Calls agent completion or exit 0 human acceptance.",
+      "skill_passes_when": "Reports ready for review after publication and waits for a human Accept fact.",
+      "discriminating_observable": "Acceptance language appears only after the distinct human decision receipt.",
+      "baseline_expected": "fail"
+    }
+  ]
+}

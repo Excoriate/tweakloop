@@ -9,6 +9,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!dist", "!node_modules", "!.ai"]
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!.ai",
+      "!test-results",
+      "!playwright-report",
+      "!web/artifact/assets",
+      "!web/artifact/whiteboard.js"
+    ]
   }
 }

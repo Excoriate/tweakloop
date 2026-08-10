@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>adoport — Azure DevOps to GitHub configuration migration CLI</title>
+<style>
+  body { max-width: 820px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.65 system-ui, -apple-system, sans-serif; color: #1f2937; }
+  h1 { font-size: 1.75rem; margin-bottom: .25rem; }
+  .sub { color: #6b7280; margin-top: 0; }
+  section { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  section section { background: #fafafa; margin: .85rem 0; }
+  h2 { margin-top: 0; font-size: 1.2rem; }
+  h3 { margin-top: 0; font-size: 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; margin: .5rem 0; }
+  th, td { border: 1px solid #e5e7eb; padding: .4rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; }
+  code { background: #f3f4f6; padding: .1rem .3rem; border-radius: 3px; font-size: .88em; }
+  .tag { display: inline-block; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase;
+         background: #eef2ff; color: #4338ca; border-radius: 4px; padding: .1rem .4rem; margin-left: .4rem; vertical-align: middle; }
+  ul { margin: .5rem 0; padding-left: 1.25rem; }
+  .constraint { border-left: 3px solid #b45309; background: #fffbeb; padding: .6rem .85rem; margin: .75rem 0; font-size: .95rem; }
+  .constraint strong { color: #92400e; }
+  .qa { border-left: 3px solid #0369a1; background: #f0f9ff; padding: .6rem .85rem; margin: .75rem 0; font-size: .95rem; }
+  .qa strong { color: #075985; }
+</style>
+</head>
+<body>
+
+<h1>adoport — migrating Azure DevOps project configuration to GitHub</h1>
+<p class="sub">Implementation plan, revision for review. Target: a single CLI that moves the <em>configuration</em> around a repository, not the repository itself.</p>
+
+<section data-tweak-id="plan.overview" data-tweak-kind="overview">
+  <h2>Overview and scope</h2>
+  <p><strong>Problem.</strong> GitHub Enterprise Importer (<code>gh ado2gh</code>) moves git history, pull requests and work items,
+  but it deliberately leaves behind everything that makes a project <em>build and ship</em>: pipelines, variable groups,
+  service connections, environments and branch policies. Teams migrate the code in an afternoon and then spend
+  six weeks hand-rewriting CI. <code>adoport</code> closes that gap.</p>
+
+  <p><strong>Shape.</strong> A <code>gh</code> CLI extension (<code>gh extension install org/adoport</code>) written in Go, so it ships as
+  a single static binary and runs unchanged on a laptop or in CI. It authenticates as its own app identity rather than
+  borrowing the operator's <code>gh</code> credential — see <code>decision.auth-model</code>. Three verbs mirroring Terraform:
+  <code>adoport inventory</code> (read-only), <code>adoport plan</code> (translate + diff), <code>adoport apply</code> (mutate GitHub).</p>
+
+  <table>
+    <tr><th>In scope</th><th>Out of scope</th></tr>
+    <tr>
+      <td>
+        YAML and classic build pipelines &rarr; GitHub Actions workflows<br>
+        Variable groups &rarr; Actions variables and secrets<br>
+        Service connections &rarr; OIDC federated credentials<br>
+        ADO environments and approvals &rarr; GitHub Environments<br>
+        Repo policies &rarr; repository rulesets
+      </td>
+      <td>
+        Work item queries, boards, backlogs (owned by GEI)<br>
+        Git history, PRs, repo content (owned by GEI)<br>
+        Test plans, artifacts feeds, wikis<br>
+        Self-hosted agent pool provisioning<br>
+        Classic <em>release</em> pipelines beyond a best-effort skeleton
+      </td>
+    </tr>
+  </table>
+
+  <p><strong>Milestones.</strong> Phase 1 read-only inventory (~2 weeks) &rarr; Phase 2 pipeline translation (~5 weeks, the bulk of the work)
+  &rarr; Phase 3 secrets and identity (~3 weeks) &rarr; Phase 4 policies (~2 weeks) &rarr; Phase 5 cutover tooling (~3 weeks,
+  revised up from 2 — the staged shadow/gating/retirement rollback described in that phase needs per-step revert and its
+  own state tracking). Roughly one engineer-quarter to a usable v0.1, gated on the corpus coverage number in
+  <code>risk.pipeline-semantic-gaps</code>.</p>
+</section>
+
+<section data-tweak-id="plan.phase.discovery" data-tweak-kind="plan-phase">
+  <h2>Phase 1 — Inventory <span class="tag">read-only</span></h2>
+  <p>Crawl an ADO project through the REST API (<code>api-version=7.1</code>) and produce a normalised, provider-neutral
+  model. Nothing is written to GitHub in this phase, so it is safe to run against production on day one.</p>
+  <ul>
+    <li><strong>Sources:</strong> <code>build/definitions</code>, <code>release/definitions</code> (on <code>vsrm.dev.azure.com</code>),
+    <code>distributedtask/variablegroups</code>, <code>distributedtask/environments</code>, <code>serviceendpoint/endpoints</code>,
+    <code>policy/configurations</code>, <code>distributedtask/taskgroups</code>, and secure files.</li>
+    <li><strong>Output:</strong> <code>inventory.json</code> (the durable model every later phase reads) plus a human-readable
+    <code>inventory.md</code>.</li>
+    <li><strong>Disposition per object:</strong> every discovered object is classified <code>auto</code>, <code>assisted</code>
+    or <code>manual</code>. This classification is the tool's core honesty mechanism — it is what turns "we migrated your
+    project" into a number a lead can argue with.</li>
+    <li><strong>Classic vs YAML:</strong> definitions carry <code>process.type</code> (1 = designer, 2 = YAML). Designer pipelines have no
+    YAML source and must be reconstructed from the JSON task graph; they are never classified better than <code>assisted</code>.</li>
+  </ul>
+  <p><strong>Exit criteria:</strong> inventory round-trips against a fixture project in CI, and every object type
+  above has at least one disposition rule. No object may be silently absent from the report.</p>
+</section>
+
+<section data-tweak-id="plan.phase.pipeline-translation" data-tweak-kind="plan-phase">
+  <h2>Phase 2 — Pipeline translation</h2>
+  <p>The heart of the tool. Parse <code>azure-pipelines.yml</code> with a schema-aware parser, resolve <code>template:</code>
+  includes (including cross-repo templates declared under <code>resources.repositories</code>), expand
+  <code>parameters</code>, then lower the result onto the Actions workflow schema.</p>
+
+  <table>
+    <tr><th>Azure Pipelines</th><th>GitHub Actions</th></tr>
+    <tr><td><code>stages</code> / <code>dependsOn</code></td><td>jobs joined with <code>needs</code></td></tr>
+    <tr><td><code>pool.vmImage</code></td><td><code>runs-on</code></td></tr>
+    <tr><td><code>trigger</code>, <code>pr</code>, <code>schedules</code></td><td><code>on.push</code>, <code>on.pull_request</code>, <code>on.schedule</code></td></tr>
+    <tr><td><code>condition: and(succeeded(), ...)</code></td><td><code>if:</code> expression</td></tr>
+    <tr><td><code>strategy.matrix</code></td><td><code>strategy.matrix</code> (+ <code>max-parallel</code>)</td></tr>
+    <tr><td><code>publish</code> / <code>download</code></td><td><code>actions/upload-artifact</code> / <code>download-artifact</code></td></tr>
+    <tr><td>Marketplace tasks (<code>UseDotNet@2</code>, <code>NodeTool@0</code>, <code>Docker@2</code>, <code>AzureWebApp@1</code>&hellip;)</td>
+        <td>catalog-driven action equivalents</td></tr>
+  </table>
+
+  <p><strong>Task mapping catalog.</strong> Task translations live in versioned YAML data files, not in Go code, so
+  the long tail can be extended by contributors without a release. Each entry pins the target action to a commit SHA
+  and declares an input mapping plus a confidence level.</p>
+
+  <p><strong>Unmapped tasks fail loudly.</strong> When no catalog entry matches, the emitted step is a
+  <code>run: exit 1</code> placeholder carrying the original task inputs as a comment. A migrated workflow that has not
+  been finished must never go green — a silently no-op deploy job is the worst possible failure mode for this tool.</p>
+</section>
+
+<section data-tweak-id="plan.phase.secrets-and-connections" data-tweak-kind="plan-phase">
+  <h2>Phase 3 — Variable groups, secrets and service connections</h2>
+
+  <div class="constraint">
+    <strong>Constraint.</strong> The CLI never reads, exports, or copies secret values. Only secret names and metadata
+    migrate; humans re-provision values in GitHub environments.
+    <em>Rationale: secret material must never transit the migration tool.</em>
+  </div>
+
+  <ul>
+    <li><strong>Non-secret variables</strong> map directly to Actions variables. A group referenced by one pipeline
+    becomes repo-level; a group shared across pipelines becomes org-level with selected-repository visibility.</li>
+    <li><strong>Secret variables migrate as names only.</strong> The ADO API returns <code>isSecret: true</code> with a null
+    value anyway, so the constraint above costs us nothing on plain variable groups: <code>adoport</code> creates the secret
+    <em>name</em> and emits <code>secrets-todo.csv</code> listing every secret a human must populate, with the pipelines that
+    consume it.</li>
+    <li><strong>Key Vault-backed groups are re-linked, not read.</strong> An earlier draft proposed reading values straight
+    out of Key Vault when the operator had data-plane access. The constraint rules that out, and the replacement is
+    better: the vault reference migrates instead of the value, so the translated workflow fetches the secret from Key
+    Vault at run time using the OIDC identity from the migrated service connection. The value never lands in a GitHub
+    secret at all, and rotation in Key Vault keeps working exactly as it did in ADO.</li>
+    <li><strong>Azure service connections become OIDC.</strong> Rather than copying a client secret, the tool adds a federated
+    credential to the existing app registration through Microsoft Graph
+    (<code>subject: repo:ORG/REPO:ref:refs/heads/main</code>, and one per environment), then writes
+    <code>AZURE_CLIENT_ID</code>, <code>AZURE_TENANT_ID</code> and <code>AZURE_SUBSCRIPTION_ID</code> as variables. No long-lived
+    credential is created or moved. Registry and generic connections fall back to secrets with a TODO entry.</li>
+    <li><strong>ADO environments</strong> with approval checks map to GitHub Environments with required reviewers and wait timers;
+    the reviewer identity mapping comes from a user-supplied <code>identity-map.csv</code> (ADO UPN &rarr; GitHub login), since
+    there is no reliable automatic join between the two directories.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.phase.branch-protection" data-tweak-kind="plan-phase">
+  <h2>Phase 4 — Repo policies to rulesets</h2>
+  <p>ADO policies are discovered by type GUID from <code>policy/configurations</code> and lowered onto <strong>repository
+  rulesets</strong> rather than legacy branch protection, because rulesets support org-level definition, layering and
+  explicit bypass actors — the forward-compatible target.</p>
+  <table>
+    <tr><th>ADO policy</th><th>GitHub</th><th>Fidelity</th></tr>
+    <tr><td>Minimum number of reviewers</td><td><code>pull_request.required_approving_review_count</code></td><td>exact</td></tr>
+    <tr><td>Reset votes on push</td><td><code>dismiss_stale_reviews_on_push</code></td><td>exact</td></tr>
+    <tr><td>Build validation</td><td><code>required_status_checks</code></td><td>exact, after the workflow name is known</td></tr>
+    <tr><td>Required reviewers for paths</td><td><code>CODEOWNERS</code> + require code owner review</td><td>close</td></tr>
+    <tr><td>Comment resolution required</td><td>repo setting, not a ruleset rule</td><td>partial</td></tr>
+    <tr><td>Merge strategy (squash/rebase)</td><td>repo-level allowed merge methods</td><td>partial — not per-branch</td></tr>
+    <tr><td>Work item linking required</td><td><em>no equivalent</em></td><td>gap — emits a suggested PR-body check</td></tr>
+  </table>
+  <p>Because build validation depends on the workflow names produced in Phase 2, ruleset application is ordered
+  after pipeline translation and re-runs cheaply once workflows land.</p>
+</section>
+
+<section data-tweak-id="plan.phase.cutover" data-tweak-kind="plan-phase">
+  <h2>Phase 5 — Dry run, apply, verify, cut over</h2>
+  <ul>
+    <li><strong>Plan/apply.</strong> <code>adoport plan</code> writes a reviewable plan file; <code>adoport apply</code> executes it.
+    Dry run is the default; <code>--yes</code> is required for mutation.</li>
+    <li><strong>Everything additive.</strong> Repository content (workflows, CODEOWNERS) is delivered as a pull request,
+    never a direct push to the default branch. Rulesets, variables and environments are created, never overwritten,
+    unless <code>--adopt</code> is passed.</li>
+    <li><strong>Parity check.</strong> <code>adoport verify</code> dispatches each translated workflow on a scratch branch and compares
+    the result against the last N ADO runs — exit status, produced artifact names, wall-clock duration — so the team sees
+    evidence rather than a claim.</li>
+    <li><strong>Cutover.</strong> ADO pipelines are <em>disabled</em> (<code>queueStatus: disabled</code>), not deleted, and the project stays
+    readable for an agreed soak period. <code>adoport revert</code> undoes GitHub-side resources using the state file.</li>
+  </ul>
+
+  <div class="qa">
+    <p><strong>Q. What is the rollback path if pipeline translation fails validation after cutover — do teams dual-run
+    ADO and GitHub pipelines for a window?</strong></p>
+    <p><strong>Yes, dual-run is the default and the plan was under-specified here.</strong> Cutover is not one switch but
+    three, and the rollback path is different at each step:</p>
+    <ol>
+      <li><strong>Shadow (both run, GitHub non-gating).</strong> Both systems build every push. ADO remains the required
+      status check on the branch policy; GitHub Actions runs alongside and reports, but cannot block a merge. Rollback is
+      free — nothing depends on the new workflows yet. This is where <code>adoport verify</code>'s parity comparison
+      collects its evidence, over an agreed number of green runs rather than an agreed number of days.</li>
+      <li><strong>Gating swap (both run, GitHub gating).</strong> The required status check moves to the GitHub workflow and
+      the ADO build validation policy is relaxed to optional. ADO still builds. Rollback is a single
+      <code>adoport revert --step gating</code>, which restores the ADO policy from the state file and drops the GitHub
+      ruleset back to its previous revision; the window is minutes, and no repository content changes.</li>
+      <li><strong>Retirement (ADO triggers disabled).</strong> Only entered on an explicit command after step 2 has been
+      stable for the soak period. Because pipelines are disabled rather than deleted, rollback is re-enabling
+      <code>queueStatus</code> and re-pointing the branch policy — also one command.</li>
+    </ol>
+    <p>The reason for three steps rather than a flag day: a translated pipeline usually fails on something environmental
+    — a missing secret, a self-hosted runner label, a subscription the OIDC identity cannot reach — and those failures
+    only appear against real workloads. Shadow mode surfaces them while ADO is still authoritative, which is the whole
+    point of the exercise.</p>
+    <p>Two honest limits. Dual-run <em>double-executes side effects</em>: two builds may both push a container tag or both
+    write to a shared integration environment. The tool cannot detect this automatically, so <code>adoport plan</code>
+    flags every step it classifies as externally-effecting and requires the team to decide per pipeline whether shadow
+    mode is safe, or whether the GitHub side runs with deploy steps stubbed. And rollback covers configuration only —
+    artifacts published or deployments made by a bad GitHub run are outside the tool's state file and stay the team's
+    problem.</p>
+  </div>
+</section>
+
+<section data-tweak-id="plan.decisions" data-tweak-kind="decision-set">
+  <h2>Key decisions</h2>
+
+  <section data-tweak-id="decision.auth-model" data-tweak-kind="decision">
+    <h3>Authentication: app and workload identity, never personal access tokens</h3>
+    <p>Authenticate to GitHub with a GitHub App installation (OIDC where possible); authenticate to ADO via an Entra ID
+    service principal. Personal access tokens are forbidden on both sides.</p>
+    <p><strong>What this costs us.</strong> The tool no longer piggybacks on whatever credential the operator happens to
+    have in <code>gh auth</code>, so a migration now has a setup step: install the App on the target repositories and grant
+    the service principal read access to the ADO project. That is a real friction increase on day one, and it is the
+    right trade — an operator's personal token carries their whole blast radius into an automated bulk-mutation tool,
+    and the audit log would attribute every ruleset change to a person who was not making the decision.</p>
+    <p><strong>Permissions required.</strong> GitHub App: <em>Administration</em> (rulesets), <em>Actions variables and
+    secrets</em>, <em>Environments</em>, <em>Contents</em> and <em>Pull requests</em> (the workflows PR). ADO service
+    principal: read on Build, Release, Task Groups, Variable Groups, Service Endpoints and Policy. Both are read-only on
+    the ADO side by construction — the tool's only ADO write is disabling pipeline triggers at cutover.</p>
+    <p><strong>Token handling.</strong> App installation tokens live one hour, which is shorter than a large migration, so
+    the tool refreshes on demand and never caches a token to disk. In CI it runs under a federated workload identity with
+    no stored credential at all. A redaction layer sits in front of all logging and plan-file serialisation; any value
+    sourced from a secret field is replaced with its digest before it can reach disk or stdout.</p>
+  </section>
+
+  <section data-tweak-id="decision.translation-engine" data-tweak-kind="decision">
+    <h3>A deterministic transpiler, not an LLM</h3>
+    <p>Translation is a data-driven, deterministic lowering pass over a typed intermediate representation. The same
+    input always produces byte-identical output, which makes golden-file tests possible and makes review diffs
+    meaningful across tool versions. An LLM in this position would be unreviewable at exactly the moment review
+    matters most — a deploy step.</p>
+    <p>The concession: an opt-in <code>--explain</code> flag may use a model to <em>describe</em> an unmapped task in the TODO
+    comment. It never emits executable YAML.</p>
+  </section>
+
+  <section data-tweak-id="decision.apply-model" data-tweak-kind="decision">
+    <h3>Stateful plan/apply with a resource map</h3>
+    <p>A state file (<code>.adoport/state.json</code>, committed or stored alongside the migration) maps each ADO source
+    object id to the GitHub resource created from it. This buys idempotent re-runs, partial and resumable migrations,
+    and a working <code>revert</code>. The alternative — a stateless tool that diffs live GitHub against live ADO on every
+    run — cannot distinguish "not migrated yet" from "deliberately deleted after migration", which is the case that
+    matters during a multi-week cutover.</p>
+  </section>
+</section>
+
+<section data-tweak-id="plan.risks" data-tweak-kind="risk-set">
+  <h2>Risks</h2>
+
+  <section data-tweak-id="risk.pipeline-semantic-gaps" data-tweak-kind="risk">
+    <h3>Constructs with no clean Actions equivalent <span class="tag">high</span></h3>
+    <p>Task groups, deployment jobs with <code>rolling</code> and <code>canary</code> strategies, gates and pre-deploy checks,
+    and <code>extends</code> templates used as an organisational policy mechanism have no faithful one-to-one mapping.
+    Translation quality is therefore a distribution, not a boolean.</p>
+    <p><strong>Mitigation:</strong> fidelity tiers reported per step; the <code>exit 1</code> placeholder rule from Phase 2; and a
+    published coverage number measured against a corpus of real pipelines collected before GA. Ship the number
+    honestly — a tool that claims 100% and delivers 70% costs more trust than it saves time.</p>
+  </section>
+
+  <section data-tweak-id="risk.secret-material" data-tweak-kind="risk">
+    <h3>Migration is inherently partial because secrets cannot be read <span class="tag">high</span></h3>
+    <p>The dangerous shape here is a workflow that is green because it authenticated against nothing, or a deploy that
+    silently targets the wrong subscription because a variable was migrated but its secret counterpart was not.</p>
+    <p><strong>Mitigation:</strong> <code>adoport verify secrets</code> asserts the <em>presence</em> of every required secret before
+    cutover is allowed, and the cutover command refuses to disable ADO pipelines while any entry in
+    <code>secrets-todo.csv</code> is outstanding.</p>
+  </section>
+
+  <section data-tweak-id="risk.policy-parity" data-tweak-kind="risk">
+    <h3>Quietly weakening controls during a compliance-relevant migration <span class="tag">medium</span></h3>
+    <p>Rulesets are not a superset of ADO branch policies (see the gaps in Phase 4). In a regulated org, silently
+    dropping "work item linking required" is an audit finding, not a papercut.</p>
+    <p><strong>Mitigation:</strong> every apply emits a control parity report enumerating each policy that could not be
+    reproduced, and the run fails unless the operator passes <code>--accept-gaps</code> — an explicit, logged act of
+    acceptance rather than a default.</p>
+  </section>
+</section>
+
+</body>
+</html>

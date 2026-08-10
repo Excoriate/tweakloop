@@ -1,0 +1,11 @@
+{
+  "protocol": "tweakloop.hook-projection-lock/v1",
+  "canonical": ".agents/hooks/v2",
+  "canonicalSha256": "4282c269e132f7c71641dc1c0eb548ead5bfe116b55c66c33278bf10f0a58ad3",
+  "canonicalFiles": 3,
+  "consumer": {
+    "path": "hooks/v2",
+    "sha256": "4282c269e132f7c71641dc1c0eb548ead5bfe116b55c66c33278bf10f0a58ad3",
+    "files": 3
+  }
+}

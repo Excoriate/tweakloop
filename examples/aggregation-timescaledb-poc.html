@@ -1,0 +1,1546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Evidence-bearing technical design for a bounded VPP Aggregation Layer POC of Azure Database for PostgreSQL Flexible Server with TimescaleDB.">
+<title>VPP Aggregation Layer — TimescaleDB POC decision design</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #14201e;
+    --muted: #5d6d68;
+    --paper: #f4f1e8;
+    --surface: #fffdf7;
+    --surface-2: #ebe7dc;
+    --line: #cbc7bb;
+    --navy: #173f52;
+    --hero-bg: #102f3d;
+    --teal: #087f72;
+    --teal-dark: #075e56;
+    --mint: #d8eee6;
+    --amber: #b85f13;
+    --amber-soft: #fae4c4;
+    --red: #a13a34;
+    --red-soft: #f5d9d2;
+    --violet: #64539b;
+    --violet-soft: #e7e1f4;
+    --shadow: 0 18px 60px rgb(23 63 82 / 10%);
+    --radius: 18px;
+    --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      linear-gradient(90deg, rgb(20 32 30 / 3%) 1px, transparent 1px) 0 0 / 44px 44px,
+      linear-gradient(rgb(20 32 30 / 3%) 1px, transparent 1px) 0 0 / 44px 44px,
+      var(--paper);
+    color: var(--ink);
+    font: 16px/1.62 var(--sans);
+  }
+
+  a { color: var(--teal-dark); text-underline-offset: .18em; }
+  a:hover { color: var(--navy); }
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  code, .mono { font-family: var(--mono); }
+  code {
+    background: rgb(23 63 82 / 8%);
+    border: 1px solid rgb(23 63 82 / 12%);
+    border-radius: 5px;
+    padding: .06rem .3rem;
+    font-size: .88em;
+    overflow-wrap: anywhere;
+  }
+  strong { color: #0b2724; }
+
+  .skip-link {
+    position: fixed;
+    z-index: 20;
+    top: .75rem;
+    left: .75rem;
+    transform: translateY(-200%);
+    background: var(--ink);
+    color: white;
+    padding: .65rem 1rem;
+    border-radius: 8px;
+  }
+  .skip-link:focus { transform: translateY(0); }
+
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 84% 12%, rgb(69 184 170 / 28%), transparent 34%),
+      linear-gradient(135deg, #091f2a 0%, var(--hero-bg) 52%, #123f3b 100%);
+    color: #f8f4e9;
+    border-bottom: 7px solid var(--teal);
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    width: 33rem;
+    height: 33rem;
+    right: -10rem;
+    top: -16rem;
+    border: 1px solid rgb(255 255 255 / 22%);
+    border-radius: 50%;
+    box-shadow: 0 0 0 4rem rgb(255 255 255 / 3%), 0 0 0 9rem rgb(255 255 255 / 3%);
+  }
+  .hero-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 4.75rem clamp(1.25rem, 4vw, 4.5rem) 3.5rem;
+  }
+  .kicker {
+    margin: 0 0 1rem;
+    color: #9fe1d2;
+    font: 700 .76rem/1.2 var(--mono);
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+  .hero h1 {
+    max-width: 1000px;
+    margin: 0;
+    color: #fffdf5;
+    font: 700 clamp(2.7rem, 7vw, 6.2rem)/.94 var(--serif);
+    letter-spacing: -.045em;
+  }
+  .hero h1 em { color: #80decf; font-style: normal; }
+  .hero-lede {
+    max-width: 820px;
+    margin: 1.5rem 0 0;
+    color: #dbe6e2;
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+  }
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .65rem;
+    margin-top: 2rem;
+  }
+  .hero-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.2rem;
+    padding: .35rem .7rem;
+    border: 1px solid rgb(255 255 255 / 25%);
+    border-radius: 999px;
+    background: rgb(0 0 0 / 12%);
+    color: #eef6f3;
+    font: 650 .76rem/1.2 var(--mono);
+  }
+  .hero-pill.alert { background: #f7d7a9; border-color: #f7d7a9; color: #512703; }
+
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+  .rail { display: none; }
+  main { min-width: 0; padding: 2.5rem clamp(1rem, 4vw, 4rem) 6rem; }
+
+  .section {
+    scroll-margin-top: 1rem;
+    margin: 0 0 2rem;
+    padding: clamp(1.25rem, 3vw, 2.5rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgb(255 253 247 / 94%);
+    box-shadow: var(--shadow);
+  }
+  .section-number {
+    display: inline-block;
+    color: var(--teal-dark);
+    font: 750 .72rem/1 var(--mono);
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+  h2 {
+    max-width: 930px;
+    margin: .45rem 0 1rem;
+    color: var(--navy);
+    font: 700 clamp(1.85rem, 4vw, 3.1rem)/1.03 var(--serif);
+    letter-spacing: -.025em;
+  }
+  h3 {
+    margin: 0 0 .55rem;
+    color: var(--navy);
+    font: 720 1.12rem/1.25 var(--sans);
+  }
+  h4 {
+    margin: 0 0 .45rem;
+    color: var(--ink);
+    font: 750 .88rem/1.3 var(--mono);
+    letter-spacing: .025em;
+    text-transform: uppercase;
+  }
+  .section-intro {
+    max-width: 880px;
+    margin: 0 0 1.5rem;
+    color: var(--muted);
+    font-size: 1.04rem;
+  }
+
+  .status-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    width: fit-content;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: .22rem .5rem;
+    font: 750 .66rem/1.2 var(--mono);
+    letter-spacing: .055em;
+    text-transform: uppercase;
+  }
+  .badge.source { color: #075f53; background: #d8f0e7; }
+  .badge.vendor { color: #493584; background: var(--violet-soft); }
+  .badge.proposed { color: #8a4105; background: var(--amber-soft); }
+  .badge.unknown { color: #842f2b; background: var(--red-soft); }
+  .badge.gate { color: #143e50; background: #dcebf0; }
+
+  .grid-2, .grid-3, .grid-4 {
+    display: grid;
+    gap: 1rem;
+  }
+  .card {
+    min-width: 0;
+    padding: 1.15rem;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--surface);
+  }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+  .card .metric {
+    display: block;
+    margin-bottom: .35rem;
+    color: var(--teal-dark);
+    font: 800 clamp(1.9rem, 4vw, 3rem)/1 var(--serif);
+  }
+  .card .label { color: var(--muted); font-size: .9rem; }
+  .card.accent { border-top: 5px solid var(--teal); }
+  .card.warn { border-top: 5px solid var(--amber); }
+  .card.risk { border-top: 5px solid var(--red); }
+  .card.vendor { border-top: 5px solid var(--violet); }
+
+  .decision-banner {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(1.15rem, 3vw, 2rem);
+    border: 2px solid var(--teal);
+    border-radius: 16px;
+    background: linear-gradient(135deg, #e7f5ef 0%, #fffaf0 100%);
+  }
+  .decision-banner .decision-state {
+    margin: 0;
+    color: var(--teal-dark);
+    font: 800 clamp(1.65rem, 4vw, 2.6rem)/1.05 var(--serif);
+  }
+  .decision-banner p { margin: 0; }
+  .not-verdict {
+    padding: 1rem 1.15rem;
+    border-left: 6px solid var(--red);
+    background: var(--red-soft);
+    color: #5a2421;
+  }
+
+  .mvp-kicker {
+    margin: 1.5rem 0 .7rem;
+    color: var(--teal-dark);
+    font: 800 .72rem/1.2 var(--mono);
+    letter-spacing: .09em;
+    text-transform: uppercase;
+  }
+  .mvp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .mvp-step {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .75rem;
+    align-items: start;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .mvp-step > span {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    color: white;
+    background: var(--teal-dark);
+    font: 800 .78rem/1 var(--mono);
+  }
+  .mvp-step strong { display: block; margin-bottom: .22rem; color: var(--navy); }
+  .mvp-step p { margin: 0; color: var(--muted); font-size: .9rem; }
+  .scope-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 1rem 0;
+  }
+  .scope-card {
+    padding: 1rem;
+    border-radius: 12px;
+    background: var(--mint);
+  }
+  .scope-card.out { background: #f3f0e9; }
+  .scope-card strong { display: block; margin-bottom: .45rem; color: var(--navy); }
+  .scope-card ul { margin: 0; padding-left: 1.1rem; }
+  .scope-card li { margin-top: .28rem; }
+  .section-details {
+    margin-top: .75rem;
+    border-top: 1px solid var(--line);
+  }
+  .section-details > summary {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    width: fit-content;
+    padding: .8rem 0;
+    color: var(--teal-dark);
+    cursor: pointer;
+    font: 760 .78rem/1.3 var(--mono);
+  }
+  .section-details > summary::after { content: "\2192"; transition: transform .18s ease; }
+  .section-details[open] > summary::after { transform: rotate(90deg); }
+
+  .callout {
+    margin: 1.25rem 0;
+    padding: 1rem 1.15rem;
+    border-left: 5px solid var(--teal);
+    background: var(--mint);
+    border-radius: 0 10px 10px 0;
+  }
+  .callout.warn { border-left-color: var(--amber); background: var(--amber-soft); }
+  .callout.danger { border-left-color: var(--red); background: var(--red-soft); }
+  .callout p { margin: .35rem 0; }
+
+  .table-wrap {
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 680px;
+    font-size: .88rem;
+  }
+  caption {
+    padding: .85rem 1rem;
+    color: var(--navy);
+    text-align: left;
+    font: 750 .92rem/1.3 var(--sans);
+    background: #edf3f2;
+    border-bottom: 1px solid var(--line);
+  }
+  th, td {
+    padding: .72rem .75rem;
+    border-bottom: 1px solid #dedbd2;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: #274541;
+    background: #f5f3ec;
+    font: 750 .71rem/1.35 var(--mono);
+    letter-spacing: .035em;
+    text-transform: uppercase;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: rgb(216 238 230 / 35%); }
+  .nowrap { white-space: nowrap; }
+
+  .topology {
+    margin: 1.5rem 0;
+    padding: 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    background:
+      linear-gradient(90deg, rgb(8 127 114 / 4%) 1px, transparent 1px) 0 0 / 24px 24px,
+      var(--surface);
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: .55rem;
+  }
+  .node {
+    position: relative;
+    padding: .9rem;
+    border: 1px solid #aeb8b4;
+    border-radius: 11px;
+    background: #fffefa;
+  }
+  .node strong { display: block; margin-bottom: .2rem; }
+  .node small { display: block; color: var(--muted); line-height: 1.4; }
+  .node.current { border-top: 5px solid var(--navy); }
+  .node.proposed { border-top: 5px solid var(--amber); }
+  .node.external { border-top: 5px solid var(--violet); }
+  .node.control { border-top: 5px solid var(--teal); }
+  .arrow {
+    align-self: center;
+    color: var(--teal-dark);
+    text-align: center;
+    font: 800 1.3rem/1 var(--mono);
+  }
+  .arrow small {
+    display: block;
+    margin-top: .15rem;
+    color: var(--muted);
+    font: 650 .65rem/1.2 var(--mono);
+    letter-spacing: .02em;
+  }
+  figcaption {
+    margin-top: .85rem;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .65rem 1rem;
+    margin-bottom: 1rem;
+    color: var(--muted);
+    font-size: .78rem;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+  .swatch { width: .85rem; height: .35rem; border-radius: 99px; background: var(--navy); }
+  .swatch.proposed { background: var(--amber); }
+  .swatch.external { background: var(--violet); }
+  .swatch.control { background: var(--teal); }
+
+  .architecture-board {
+    display: grid;
+    gap: .85rem;
+    margin: 1.25rem 0;
+  }
+  .boundary {
+    padding: 1rem;
+    border: 1px dashed #8c9995;
+    border-radius: 14px;
+    background: rgb(255 255 255 / 55%);
+  }
+  .boundary-title {
+    margin-bottom: .7rem;
+    color: var(--muted);
+    font: 760 .68rem/1.2 var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .boundary-grid { display: grid; gap: .7rem; }
+  .crossing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    color: var(--teal-dark);
+    text-align: center;
+    font: 750 .71rem/1.3 var(--mono);
+  }
+  .crossing::before, .crossing::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--teal);
+  }
+
+  .fail-trace {
+    display: grid;
+    gap: .5rem;
+    margin: 1rem 0;
+  }
+  .trace-step {
+    padding: .8rem .9rem;
+    border-left: 5px solid var(--red);
+    border-radius: 0 9px 9px 0;
+    background: #fff8f4;
+  }
+  .trace-step.safe { border-left-color: var(--teal); background: #eff8f4; }
+  .trace-arrow { color: var(--muted); text-align: center; font: 800 1rem/1 var(--mono); }
+
+  .phase-list {
+    display: grid;
+    gap: .75rem;
+    counter-reset: phase;
+    margin: 1rem 0;
+  }
+  .phase {
+    position: relative;
+    min-width: 0;
+    padding: 1rem 1rem 1rem 4rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    overflow-wrap: anywhere;
+  }
+  .phase::before {
+    counter-increment: phase;
+    content: counter(phase, decimal-leading-zero);
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    color: var(--teal-dark);
+    font: 800 1.15rem/1 var(--mono);
+  }
+  .phase p { margin: .35rem 0; }
+
+  .formula {
+    overflow-x: auto;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 1px solid var(--navy);
+    border-radius: 12px;
+    background: #eaf1f2;
+    color: var(--navy);
+    font: 750 clamp(.76rem, 2vw, 1rem)/1.55 var(--mono);
+    white-space: nowrap;
+  }
+
+  .gate-card {
+    display: grid;
+    gap: .65rem;
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-top: 6px solid var(--teal);
+    border-radius: 13px;
+    background: var(--surface);
+  }
+  .gate-card.blocked { border-top-color: var(--red); }
+  .gate-card.open { border-top-color: var(--amber); }
+  .gate-state {
+    width: fit-content;
+    border-radius: 999px;
+    padding: .2rem .5rem;
+    background: #e7efee;
+    color: var(--navy);
+    font: 780 .65rem/1.2 var(--mono);
+    text-transform: uppercase;
+  }
+
+  .risk-list { display: grid; gap: .8rem; }
+  .risk-item {
+    display: grid;
+    gap: .65rem;
+    padding: 1rem;
+    border: 1px solid #e0c6c1;
+    border-left: 6px solid var(--red);
+    border-radius: 10px;
+    background: #fff9f6;
+  }
+  .risk-item p { margin: 0; }
+  .risk-severity { color: var(--red); font: 780 .66rem/1.2 var(--mono); text-transform: uppercase; }
+
+  .toc-inline {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .5rem;
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .toc-inline a {
+    display: block;
+    height: 100%;
+    padding: .65rem .75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    text-decoration: none;
+    font-size: .85rem;
+  }
+
+  .source-list { margin: 1rem 0 0; padding-left: 1.2rem; }
+  .source-list li { margin-bottom: .75rem; }
+  .epistemic-summary {
+    display: grid;
+    gap: .75rem;
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 1rem;
+  }
+  .epistemic-summary div {
+    padding: .8rem;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+  }
+  .epistemic-summary strong { display: block; font-size: 1.5rem; }
+
+  .footer {
+    padding: 2.4rem clamp(1rem, 4vw, 4rem) 3rem;
+    background: #0e2e3b;
+    color: #dbe8e5;
+  }
+  .footer-inner { max-width: 1160px; margin: 0 auto; }
+  .footer strong { color: white; }
+
+  @media (min-width: 720px) {
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .decision-banner { grid-template-columns: 1.15fr .85fr; align-items: center; }
+    .flow { grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr) auto minmax(120px, 1fr); }
+    .flow.six { grid-template-columns: minmax(110px, 1fr) auto minmax(110px, 1fr) auto minmax(110px, 1fr); }
+    .flow.six .break { grid-column: 1 / -1; height: 0; }
+    .boundary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .epistemic-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fail-trace { grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; align-items: stretch; }
+    .trace-arrow { align-self: center; }
+  }
+
+  @media (max-width: 719px) {
+    .mvp-grid, .scope-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (min-width: 1080px) {
+    .page { grid-template-columns: 238px minmax(0, 1fr); }
+    .rail {
+      display: block;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      padding: 2rem 1rem 2rem 1.5rem;
+    }
+    .rail-title {
+      margin: 0 0 .8rem;
+      color: var(--muted);
+      font: 760 .68rem/1.2 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .rail ol { margin: 0; padding: 0; list-style: none; }
+    .rail a {
+      display: block;
+      padding: .42rem .55rem;
+      border-left: 2px solid var(--line);
+      color: #3e5550;
+      text-decoration: none;
+      font-size: .78rem;
+    }
+    .rail a:hover { border-left-color: var(--teal); background: rgb(255 255 255 / 55%); color: var(--navy); }
+    main { padding-left: 2rem; }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --ink: #e8eeeb;
+      --muted: #a7b5b1;
+      --paper: #10201f;
+      --surface: #172a28;
+      --surface-2: #203431;
+      --line: #3b514d;
+      --navy: #9dd4e5;
+      --hero-bg: #102f3d;
+      --teal: #45b8aa;
+      --teal-dark: #79d1c4;
+      --mint: #153b35;
+      --amber: #e59b51;
+      --amber-soft: #422c18;
+      --red: #e8877f;
+      --red-soft: #422421;
+      --violet: #b8a7e9;
+      --violet-soft: #312a48;
+      --shadow: 0 18px 60px rgb(0 0 0 / 25%);
+    }
+    strong { color: #f4f7f5; }
+    .section { background: rgb(23 42 40 / 95%); }
+    .decision-banner { background: linear-gradient(135deg, #153b35 0%, #392b1d 100%); }
+    .not-verdict { color: #ffd9d4; }
+    th { color: #c9d9d5; background: #203431; }
+    tbody tr:hover { background: rgb(69 184 170 / 10%); }
+    .topology { background: var(--surface); }
+    .node { background: #1a302d; }
+    .trace-step { background: #35221f; }
+    .trace-step.safe { background: #173a34; }
+    .formula { background: #1a3337; }
+    .risk-item { background: #322320; border-color: #60423e; }
+    code { background: rgb(255 255 255 / 8%); border-color: rgb(255 255 255 / 10%); }
+  }
+
+  @media print {
+    :root { color-scheme: light; --ink: #111; --muted: #444; --paper: #fff; --surface: #fff; --line: #aaa; --navy: #173f52; --teal-dark: #075e56; }
+    body { background: white; font-size: 10.5pt; }
+    .hero { color: #111; background: white; border: 0; }
+    .hero::after, .rail, .skip-link { display: none; }
+    .hero-inner { padding: 1.4cm 1.2cm .6cm; }
+    .hero h1 { color: #173f52; font-size: 34pt; }
+    .hero h1 em, .hero-lede, .kicker { color: #333; }
+    .hero-pill { color: #111; background: white; border-color: #777; }
+    .hero-pill.alert { color: #111; background: white; }
+    .page { display: block; }
+    main { padding: 0 1.2cm 1cm; }
+    .section { box-shadow: none; break-inside: avoid-page; margin: 0 0 .6cm; padding: .65cm; background: white; }
+    .card, .node, .phase, .gate-card, .risk-item { break-inside: avoid; background: white; }
+    .table-wrap { overflow: visible; }
+    table { min-width: 0; font-size: 8pt; }
+    a { color: #111; text-decoration: none; }
+    a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 7pt; overflow-wrap: anywhere; }
+    .footer { background: white; color: #333; padding: .5cm 1.2cm 1cm; }
+    .footer strong { color: #111; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to the design</a>
+
+<header class="hero" data-tweak-id="poc.title" data-tweak-kind="document-title">
+  <div class="hero-inner">
+    <p class="kicker">VPP Aggregation Layer · bounded proof-of-concept · design for review</p>
+    <h1>One small POC. <em>One clear decision.</em></h1>
+    <p class="hero-lede">Test one isolated PostgreSQL + TimescaleDB path beside InfluxDB. Keep InfluxDB authoritative. Learn only what is needed to decide whether a migration proposal is worth writing.</p>
+    <div class="hero-meta">
+      <span class="hero-pill alert">Replacement verdict: not made</span>
+      <span class="hero-pill">Revision 0.2 · MVP pass · 2026-08-04</span>
+      <span class="hero-pill">Evidence packet: source + Microsoft Learn</span>
+      <span class="hero-pill">Runtime proof: not yet run</span>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <nav class="rail" aria-label="Design sections">
+    <p class="rail-title">MVP decision path</p>
+    <ol>
+      <li><a href="#decision">01 · Start here</a></li>
+      <li><a href="#target">02 · Minimal architecture</a></li>
+      <li><a href="#timeline">03 · Four-step run</a></li>
+      <li><a href="#experiments">04 · Exit gates</a></li>
+      <li><a href="#unknowns">05 · Open blockers</a></li>
+    </ol>
+    <p class="rail-title" style="margin-top: 1.5rem;">Evidence appendix</p>
+    <ol>
+      <li><a href="#evidence">02 · Evidence boundary</a></li>
+      <li><a href="#current">03 · Current topology</a></li>
+      <li><a href="#target">04 · Target architecture</a></li>
+      <li><a href="#workload">05 · Workload &amp; model</a></li>
+      <li><a href="#provisioning">06 · Provisioning</a></li>
+      <li><a href="#migration">07 · Migration &amp; rollback</a></li>
+      <li><a href="#observability">08 · Observability</a></li>
+      <li><a href="#recovery">09 · HA &amp; restore</a></li>
+      <li><a href="#cost">10 · Cost model</a></li>
+      <li><a href="#experiments">11 · Experiment matrix</a></li>
+      <li><a href="#unknowns">12 · Unknowns &amp; owners</a></li>
+      <li><a href="#timeline">13 · Timeline</a></li>
+      <li><a href="#record">14 · Decision record</a></li>
+      <li><a href="#sources">15 · Sources</a></li>
+    </ol>
+  </nav>
+
+  <main id="main-content">
+    <section class="section" id="decision" data-tweak-id="poc.decision-frame" data-tweak-kind="overview" aria-labelledby="decision-title">
+      <span class="section-number">01 · MVP at a glance</span>
+      <h2 id="decision-title">Prove four things. Ship nothing to production.</h2>
+      <p class="section-intro">The POC is deliberately narrow: one exporter path, representative traffic, two operator views, and a reversible failure test. The output is a go / extend / stop recommendation—not a migration.</p>
+
+      <div class="decision-banner" data-tweak-id="decision.poc-only" data-tweak-kind="decision">
+        <div>
+          <span class="badge proposed">proposed decision</span>
+          <p class="decision-state">Run a shadow POC. Keep InfluxDB authoritative.</p>
+        </div>
+        <p>Use one VPPAL exporter to dual-write a bounded workload. Compare the stored facts and two representative dashboards. Break the candidate on purpose. Stop after four gates produce a decision.</p>
+      </div>
+
+      <p class="mvp-kicker">The smallest useful implementation</p>
+      <div class="mvp-grid" data-tweak-id="decision.mvp-plan" data-tweak-kind="ordered-plan">
+        <article class="mvp-step" data-tweak-id="mvp.step.baseline" data-tweak-kind="plan-phase"><span>1</span><div><strong>Freeze the baseline</strong><p>Choose one exporter, one representative workload window, and two dashboards. Record current Influx results.</p></div></article>
+        <article class="mvp-step" data-tweak-id="mvp.step.deploy" data-tweak-kind="plan-phase"><span>2</span><div><strong>Deploy the candidate</strong><p>Provision one private Flexible Server, enable TimescaleDB, and create the minimum schema and fail-open writer.</p></div></article>
+        <article class="mvp-step" data-tweak-id="mvp.step.shadow" data-tweak-kind="plan-phase"><span>3</span><div><strong>Run in shadow</strong><p>Dual-write for the agreed window. Compare facts, freshness, query results, and the two operator views.</p></div></article>
+        <article class="mvp-step" data-tweak-id="mvp.step.break" data-tweak-kind="plan-phase"><span>4</span><div><strong>Break it, then decide</strong><p>Block PostgreSQL, prove VPPAL keeps running, restore service, price the footprint, and record go / extend / stop.</p></div></article>
+      </div>
+
+      <div class="scope-grid">
+        <div class="scope-card" data-tweak-id="decision.mvp-in" data-tweak-kind="scope"><strong>In the MVP</strong><ul><li>1 exporter path</li><li>2 operator views</li><li>1 failure + recovery drill</li><li>Measured cost and latency</li></ul></div>
+        <div class="scope-card out" data-tweak-id="decision.mvp-out" data-tweak-kind="scope"><strong>Not in the MVP</strong><ul><li>Production reader cutover</li><li>InfluxDB retirement</li><li>All-app rollout</li><li>Final schema optimization</li></ul></div>
+      </div>
+
+      <div class="not-verdict" data-tweak-id="decision.no-replacement-verdict" data-tweak-kind="constraint">
+        <strong>Non-decision.</strong> Microsoft documents a supported extension path. That proves neither target-subscription activation, the available extension version, query parity, workload fitness, Eneco ownership, production recoverability, nor cost. This artifact must not be cited as approval to decommission InfluxDB.
+      </div>
+
+      <p class="mvp-kicker">Four exit gates</p>
+      <div class="grid-4" style="margin-top: 1rem;">
+        <article class="card accent" data-tweak-id="decision.constraint.operations" data-tweak-kind="constraint">
+          <span class="metric">0</span>
+          <span class="label">allowed operational failures caused by monitoring loss</span>
+        </article>
+        <article class="card accent" data-tweak-id="decision.constraint.visibility" data-tweak-kind="constraint">
+          <span class="metric">≈1 min</span>
+          <span class="label">AL010 data-visibility target to test end to end</span>
+        </article>
+        <article class="card accent" data-tweak-id="decision.constraint.cost" data-tweak-kind="constraint">
+          <span class="metric">≤ €1</span>
+          <span class="label">approximate monthly platform cost per active device</span>
+        </article>
+        <article class="card warn" data-tweak-id="decision.constraint.dashboards" data-tweak-kind="constraint">
+          <span class="metric">4</span>
+          <span class="label">proof gates: safety, freshness, parity, and cost/ownership</span>
+        </article>
+      </div>
+
+      <ul class="toc-inline" aria-label="Decision questions"><li><a href="#target">Architecture detail</a></li><li><a href="#timeline">Run sequence</a></li><li><a href="#experiments">Proof matrix</a></li><li><a href="#unknowns">Open blockers</a></li></ul>
+    </section>
+
+    <section class="section" id="evidence" data-tweak-id="poc.evidence-boundary" data-tweak-kind="evidence-boundary" aria-labelledby="evidence-title">
+      <span class="section-number">02 · Evidence boundary</span>
+      <h2 id="evidence-title">Four labels prevent one polished falsehood.</h2>
+      <p class="section-intro">Each technical claim belongs to one proof class. The distinction is part of the design because vendor support, source structure, and operational readiness answer different questions.</p>
+      <details class="section-details"><summary>Open evidence rules</summary>
+
+      <div class="status-key">
+        <span class="badge source">source</span>
+        <span class="badge vendor">vendor</span>
+        <span class="badge proposed">proposed</span>
+        <span class="badge unknown">unknown</span>
+        <span class="badge gate">gate</span>
+      </div>
+
+      <div class="grid-2">
+        <article class="card accent" data-tweak-id="evidence.source" data-tweak-kind="evidence-class">
+          <h3><span class="badge source">source</span> Repository-declared fact</h3>
+          <p>Observed in the bounded VPPAL evidence packet: caller counts, exporter topology, measurement names, dashboard count, fail-open behavior, deployment surfaces, and placement ownership.</p>
+        </article>
+        <article class="card vendor" data-tweak-id="evidence.vendor" data-tweak-kind="evidence-class">
+          <h3><span class="badge vendor">vendor</span> Microsoft-documented capability</h3>
+          <p>Azure documents the TimescaleDB Apache-2 extension and its activation shape on Flexible Server. The cited pages remain specifications until the target server is probed.</p>
+        </article>
+        <article class="card warn" data-tweak-id="evidence.proposed" data-tweak-kind="evidence-class">
+          <h3><span class="badge proposed">proposed</span> POC mechanism or threshold</h3>
+          <p>A candidate design chosen to produce evidence: bounded buffering, schema variants, private access, test thresholds, migration stages, and operator drills.</p>
+        </article>
+        <article class="card risk" data-tweak-id="evidence.unknown" data-tweak-kind="evidence-class">
+          <h3><span class="badge unknown">unknown</span> Decision-blocking gap</h3>
+          <p>No live Azure, OpenShift, Argo, Grafana, InfluxDB, PostgreSQL, or pipeline surface was queried for the source packet. These gaps become owned gates in this design.</p>
+        </article>
+      </div>
+
+      <div class="callout warn" data-tweak-id="evidence.proof-ceiling" data-tweak-kind="proof-boundary">
+        <p><strong>Proof ceiling.</strong> Source inspection proves the current integration shape. Microsoft Learn proves a vendor-documented activation contract. Only target-environment experiments can prove activation, performance, failure isolation, recovery, cost, and operational ownership. Only a human decision can approve migration.</p>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="current" data-tweak-id="poc.current-influx-topology" data-tweak-kind="topology" aria-labelledby="current-title">
+      <span class="section-number">03 · Current topology &amp; blast radius</span>
+      <h2 id="current-title">The storage port is narrow; the migration surface is not.</h2>
+      <p class="section-intro">Thirteen business-flow callers depend on a storage-neutral port, but seven applications, ten point mappers, secret delivery, deployment configuration, dashboards, and the self-managed Influx lifecycle bind the operating system to InfluxDB.</p>
+      <details class="section-details"><summary>Open current-state evidence</summary>
+
+      <figure class="topology" data-tweak-id="topology.current.write-read-path" data-tweak-kind="causal-flow">
+        <div class="legend">
+          <span><i class="swatch"></i> source-observed application surface</span>
+          <span><i class="swatch external"></i> external or separately operated dependency</span>
+        </div>
+        <div class="flow" role="img" aria-label="Thirteen business flow callers invoke IDataExporter. Ten Influx-specific mappers in seven applications create nine measurements. A shared helper writes the vpp-agg aggregation bucket. Four committed Grafana dashboards read it.">
+          <div class="node current" data-tweak-id="current.callers" data-tweak-kind="component">
+            <strong>13 business-flow callers</strong>
+            <small>Device and pool operational processing</small>
+          </div>
+          <div class="arrow" aria-hidden="true">→<small>functional monitoring facts</small></div>
+          <div class="node current" data-tweak-id="current.exporter-port" data-tweak-kind="component">
+            <strong><code>IDataExporter&lt;T&gt;</code></strong>
+            <small>Storage-neutral application boundary</small>
+          </div>
+          <div class="arrow" aria-hidden="true">→<small>10 mappings · 7 apps</small></div>
+          <div class="node current" data-tweak-id="current.influx-mappers" data-tweak-kind="component">
+            <strong>Influx point exporters</strong>
+            <small>Encode nine measurements and tag/field contracts</small>
+          </div>
+        </div>
+        <div class="crossing" aria-hidden="true">shared transport and deployment boundary</div>
+        <div class="flow" role="img" aria-label="Shared Influx helper writes to a self-managed Influx bucket read by Grafana.">
+          <div class="node current" data-tweak-id="current.influx-helper" data-tweak-kind="component">
+            <strong><code>InfluxDbClientHelper</code></strong>
+            <small>Configuration, transport, suppressed write failure</small>
+          </div>
+          <div class="arrow" aria-hidden="true">→<small>write only</small></div>
+          <div class="node external" data-tweak-id="current.influx-bucket" data-tweak-kind="external-service">
+            <strong><code>vpp-agg / aggregation</code></strong>
+            <small>Retention, downsampling, backup, restore: not source-controlled in evidence</small>
+          </div>
+          <div class="arrow" aria-hidden="true">→<small>InfluxQL</small></div>
+          <div class="node external" data-tweak-id="current.grafana-dashboards" data-tweak-kind="consumer">
+            <strong>4 committed Grafana dashboards</strong>
+            <small>Known readers; live/ad-hoc consumers remain unbounded</small>
+          </div>
+        </div>
+        <figcaption><strong>Prediction enabled:</strong> replacing only the shared client compiles a new transport but leaves schema, deployment, queries, secrets, lifecycle ownership, and live-only consumers unresolved.</figcaption>
+      </figure>
+
+      <div class="callout" data-tweak-id="current.fail-open-invariant" data-tweak-kind="invariant">
+        <p><span class="badge source">source</span> <strong>Fail-open is the load-bearing invariant.</strong> Invalid Influx configuration selects a no-op exporter; write failures are logged and suppressed. Functional-monitoring loss must not delay or fail operational VPPAL processing unless a later, explicit decision changes that policy.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="current.blast-radius" data-tweak-kind="impact-table">
+          <caption>Migration blast radius — what stays, what changes, what remains unknown</caption>
+          <thead>
+            <tr><th scope="col">Surface</th><th scope="col">Count / evidence</th><th scope="col">POC treatment</th><th scope="col">Looks correct while wrong</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Business callers</td><td>13 sites</td><td>Preserve <code>IDataExporter&lt;T&gt;</code> call contract.</td><td>New exporter adds latency or throws under outage.</td></tr>
+            <tr><td>Point schema</td><td>10 exporters · 7 apps · 9 measurements</td><td>Map every tag, field, timestamp, null, precision, and identifier.</td><td>Rows exist, but field or grouping semantics drift.</td></tr>
+            <tr><td>Transport and DI</td><td>1 shared helper plus options/package/stub surfaces</td><td>Add a candidate sink behind the existing port; keep failure isolation.</td><td>Compile succeeds while retry/backpressure changes operations.</td></tr>
+            <tr><td>Deployment configuration</td><td>7 Helm value / Deployment bindings</td><td>Inventory and stage config changes per application.</td><td>One workload points at a stale or public endpoint.</td></tr>
+            <tr><td>Secret plumbing</td><td>Key Vault → CSI → Kubernetes Secret</td><td>Preserve controlled delivery; separate admin, migrator, writer, reader.</td><td>A runtime pod receives database-owner credentials.</td></tr>
+            <tr><td>Readers</td><td>4 committed dashboards; 2 measurements have no committed reader</td><td>Translate all known panels; discover live/ad-hoc consumers.</td><td>Four dashboards pass while a live alert or notebook breaks.</td></tr>
+            <tr><td>Influx lifecycle</td><td>Argo application + 3 conflicting endpoint generations</td><td>Do not retire until canonical live endpoint and retention are proven.</td><td>The wrong endpoint is compared or decommissioned.</td></tr>
+            <tr><td>Managed service ownership</td><td>No PostgreSQL/Timescale resource in fetched Aggregation IaC</td><td>Prototype in declared infrastructure owner; confirm live canonical owner.</td><td>A POC exists with no production team or incident route.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="target" data-tweak-id="poc.target-architecture" data-tweak-kind="architecture" aria-labelledby="target-title">
+      <span class="section-number">04 · Candidate architecture</span>
+      <h2 id="target-title">Isolate the experiment at the exporter boundary.</h2>
+      <p class="section-intro">The candidate keeps the thirteen callers stable, fans monitoring records into independent sinks, and prevents PostgreSQL latency, connection pressure, or outage from becoming business-path backpressure. Every orange element is a proposal to test, not an implemented fact.</p>
+      <details class="section-details"><summary>Open architecture detail</summary>
+
+      <figure class="topology" data-tweak-id="architecture.target.boundaries" data-tweak-kind="boundary-map">
+        <div class="legend">
+          <span><i class="swatch"></i> preserved source boundary</span>
+          <span><i class="swatch proposed"></i> POC component</span>
+          <span><i class="swatch external"></i> managed/external service</span>
+          <span><i class="swatch control"></i> independent control or evidence</span>
+        </div>
+
+        <div class="architecture-board">
+          <div class="boundary" data-tweak-id="architecture.target.workload-boundary" data-tweak-kind="runtime-boundary">
+            <div class="boundary-title">Seven application workloads · operational processing boundary</div>
+            <div class="boundary-grid">
+              <div class="node current" data-tweak-id="architecture.target.callers" data-tweak-kind="component">
+                <strong>13 callers</strong>
+                <small>Unchanged business control flow</small>
+              </div>
+              <div class="node current" data-tweak-id="architecture.target.port" data-tweak-kind="component">
+                <strong><code>IDataExporter&lt;T&gt;</code></strong>
+                <small>Stable functional-monitoring port</small>
+              </div>
+              <div class="node proposed" data-tweak-id="architecture.target.fanout" data-tweak-kind="component">
+                <strong>Isolated dual-sink adapter</strong>
+                <small>Independent bounded paths; candidate failure never blocks caller</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="crossing">candidate records cross through private TLS; failures return only evidence</div>
+
+          <div class="boundary" data-tweak-id="architecture.target.data-boundary" data-tweak-kind="managed-service-boundary">
+            <div class="boundary-title">Azure managed data boundary · target subscription and network remain to be proven</div>
+            <div class="boundary-grid">
+              <div class="node proposed" data-tweak-id="architecture.target.writer" data-tweak-kind="component">
+                <strong>Bounded batch writer</strong>
+                <small>Finite queue, finite timeout, no unbounded retry, explicit drop/error counters</small>
+              </div>
+              <div class="node external" data-tweak-id="architecture.target.flexible-server" data-tweak-kind="external-service">
+                <strong>Azure PostgreSQL Flexible Server</strong>
+                <small>Private access, TLS, least-privilege roles, approved HA and backup configuration</small>
+              </div>
+              <div class="node proposed" data-tweak-id="architecture.target.timescale" data-tweak-kind="data-store">
+                <strong>TimescaleDB candidate schema</strong>
+                <small>Raw hypertables, dimension columns, SQL views/aggregates, retention path under test</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="crossing">read-only SQL and evidence streams cross separate credentials</div>
+
+          <div class="boundary" data-tweak-id="architecture.target.consumer-boundary" data-tweak-kind="consumer-boundary">
+            <div class="boundary-title">Reader and operator boundary</div>
+            <div class="boundary-grid">
+              <div class="node proposed" data-tweak-id="architecture.target.grafana" data-tweak-kind="consumer">
+                <strong>Grafana SQL data source</strong>
+                <small>Four translated dashboards plus discovered live consumers</small>
+              </div>
+              <div class="node control" data-tweak-id="architecture.target.comparator" data-tweak-kind="verification-component">
+                <strong>Deterministic comparator</strong>
+                <small>Influx vs PostgreSQL counts, values, buckets, gaps, freshness, latency</small>
+              </div>
+              <div class="node control" data-tweak-id="architecture.target.independent-monitoring" data-tweak-kind="control-plane">
+                <strong>Independent POC telemetry</strong>
+                <small>Writer, app, network, and server signals must not depend on the candidate database</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption><strong>Prediction enabled:</strong> when PostgreSQL is black-holed, the candidate queue saturates, samples are accounted as dropped, and operators see an alert; business processing and the authoritative Influx path continue.</figcaption>
+      </figure>
+
+      <section class="callout danger" data-tweak-id="architecture.target.fail-open-policy" data-tweak-kind="invariant">
+        <h3>Fail-open writer contract</h3>
+        <p><strong>Primitive:</strong> a monitoring fact emitted after domain processing.</p>
+        <p><strong>Transformation:</strong> a non-blocking or strictly bounded enqueue copies it to the candidate path; the background writer batches records with finite connection and statement timeouts.</p>
+        <p><strong>Invariant:</strong> candidate queueing, retries, logging, and telemetry consume bounded time and memory; no exception or pressure propagates into operational processing or the Influx sink.</p>
+        <p><strong>Consequence:</strong> database loss causes visible monitoring loss, not VPPAL control loss. The cost is accepted sample loss during candidate failure; the experiment must quantify it.</p>
+      </section>
+
+      <div class="fail-trace" data-tweak-id="architecture.target.failure-trace" data-tweak-kind="failure-trace">
+        <div class="trace-step"><strong>Trigger</strong><br>PostgreSQL timeout, DNS failure, or exhausted pool</div>
+        <div class="trace-arrow" aria-hidden="true">→</div>
+        <div class="trace-step"><strong>Bounded effect</strong><br>Batch fails; queue reaches limit; retries stop</div>
+        <div class="trace-arrow" aria-hidden="true">→</div>
+        <div class="trace-step"><strong>Visible evidence</strong><br>Error/drop counters and alert increase outside candidate DB</div>
+        <div class="trace-arrow" aria-hidden="true">→</div>
+        <div class="trace-step safe"><strong>Preserved outcome</strong><br>Caller returns; operational flow and Influx continue</div>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="architecture.target.tradeoffs" data-tweak-kind="decision-table">
+          <caption>Candidate design choices — enables, prevents, costs</caption>
+          <thead><tr><th scope="col">Choice</th><th scope="col">Enables</th><th scope="col">Prevents</th><th scope="col">Costs / falsifier</th></tr></thead>
+          <tbody>
+            <tr><td>Preserve <code>IDataExporter&lt;T&gt;</code></td><td>Caller stability and staged sink replacement.</td><td>Storage concerns leaking into 13 business sites.</td><td>Port may lack batch/idempotency context; falsify by tracing all call sites.</td></tr>
+            <tr><td>Bounded asynchronous candidate branch</td><td>Failure isolation and batch efficiency.</td><td>Unbounded retries and database backpressure entering business flow.</td><td>Samples can be dropped; queue/memory/latency must be load-tested.</td></tr>
+            <tr><td>Separate writer, reader, migrator roles</td><td>Least privilege and auditable rotation.</td><td>Grafana or runtime workloads performing schema/admin operations.</td><td>More credentials and ownership; rotation drill must pass.</td></tr>
+            <tr><td>Independent comparator and telemetry</td><td>Detection when the candidate is unavailable or semantically wrong.</td><td>The database proving its own health.</td><td>Additional evidence pipeline; falsify by disabling candidate storage during the test.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="workload" data-tweak-id="poc.workload-data-query" data-tweak-kind="data-design" aria-labelledby="workload-title">
+      <span class="section-number">05 · Workload, data model &amp; query mapping</span>
+      <h2 id="workload-title">Preserve contracts before optimizing tables.</h2>
+      <p class="section-intro">The source packet names measurements but not complete tag/field schemas, cardinality, row width, or live rates. The POC must inventory those facts first, then compare a contract-preserving nine-hypertable baseline against a consolidation by stable grain.</p>
+      <details class="section-details"><summary>Open data and query detail</summary>
+
+      <div class="grid-3">
+        <article class="card accent" data-tweak-id="workload.schema.baseline" data-tweak-kind="schema-option">
+          <h3>Option A · nine hypertables</h3>
+          <p>Keep one typed table per current measurement. It maximizes semantic traceability and gives every exporter an obvious target, at the cost of repeated columns and more policy objects.</p>
+        </article>
+        <article class="card warn" data-tweak-id="workload.schema.grain" data-tweak-kind="schema-option">
+          <h3>Option B · stable-grain families</h3>
+          <p>Consolidate compatible pool- and device-grain facts behind typed views. It can reduce schema and query repetition, but only if field sparsity and retention semantics do not create a braided generic table.</p>
+        </article>
+        <article class="card risk" data-tweak-id="workload.schema.json" data-tweak-kind="rejected-option">
+          <h3>Control · generic JSON payload</h3>
+          <p>Use only as a negative control. It can ingest unknown shapes quickly while hiding type drift, index cost, query semantics, and governance—the exact questions the POC must answer.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="workload.measurement-map" data-tweak-kind="mapping-table">
+          <caption>Nine current measurement contracts — initial schema hypotheses, not field-level proof</caption>
+          <thead><tr><th scope="col">Measurement</th><th scope="col">Candidate grain</th><th scope="col">Baseline target</th><th scope="col">Must discover before DDL freezes</th></tr></thead>
+          <tbody>
+            <tr><td><code>poolsetpoint</code></td><td>Pool <span class="badge proposed">inferred</span></td><td><code>pool_setpoint_sample</code></td><td>Identifiers, value fields, units, timestamp precision, duplicate behavior.</td></tr>
+            <tr><td><code>deviceflexreservation</code></td><td>Device <span class="badge proposed">inferred</span></td><td><code>device_flex_reservation_sample</code></td><td>Reservation interval, pool relation, nullable fields, update frequency.</td></tr>
+            <tr><td><code>devicesetpoint</code></td><td>Device <span class="badge proposed">inferred</span></td><td><code>device_setpoint_sample</code></td><td>Value/units, identifier cardinality, same-timestamp multiplicity.</td></tr>
+            <tr><td><code>poolstrikeprice</code></td><td>Pool <span class="badge proposed">inferred</span></td><td><code>pool_strike_price_sample</code></td><td>Currency/precision, market dimensions, aggregation semantics.</td></tr>
+            <tr><td><code>devicestrikeprice</code></td><td>Device <span class="badge proposed">inferred</span></td><td><code>device_strike_price_sample</code></td><td>Currency/precision, pool relation, null and replacement behavior.</td></tr>
+            <tr><td><code>pooltelemetry</code></td><td>Pool <span class="badge proposed">inferred</span></td><td><code>pool_telemetry_sample</code></td><td>Field set, high-cardinality tags, sampling cadence, late data.</td></tr>
+            <tr><td><code>devicetelemetry</code></td><td>Device <span class="badge proposed">inferred</span></td><td><code>device_telemetry_sample</code></td><td>Field set, device cardinality, bursts, sampling cadence, late data.</td></tr>
+            <tr><td><code>devicecapacity</code></td><td>Device <span class="badge proposed">inferred</span></td><td><code>device_capacity_sample</code></td><td>Capacity dimensions, units, validity interval, change frequency.</td></tr>
+            <tr><td><code>devicemeritorder</code></td><td>Device + pool/order <span class="badge proposed">inferred</span></td><td><code>device_merit_order_sample</code></td><td>Order identity, ties, rank semantics, complete-snapshot boundary.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn" data-tweak-id="workload.identity-design" data-tweak-kind="design-question">
+        <p><strong>Comparison identity is a POC prerequisite.</strong> A deterministic key must distinguish a missing write from a legal same-timestamp duplicate. Candidate inputs are measurement, event timestamp, stable dimensions, producer instance, and a source ordinal or correlation ID. If no collision-safe identity exists at the exporter boundary, compare grouped multisets and record that limitation; do not invent exactly-once semantics.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="workload.query-semantics" data-tweak-kind="query-mapping-table">
+          <caption>Query translation map — SQL syntax is not parity until edge fixtures agree</caption>
+          <thead><tr><th scope="col">Current InfluxQL behavior</th><th scope="col">Candidate PostgreSQL/Timescale shape</th><th scope="col">Parity trap</th><th scope="col">Discriminating fixture</th></tr></thead>
+          <tbody>
+            <tr><td>Dashboard time filter</td><td><code>observed_at &gt;= :from AND observed_at &lt; :to</code></td><td>Inclusive end boundaries double-count adjoining windows.</td><td>Samples exactly at both window boundaries.</td></tr>
+            <tr><td><code>GROUP BY time(...)</code></td><td>Candidate bucket function or SQL interval expression</td><td>Origin, timezone, daylight saving, and bucket edges differ.</td><td>DST transition plus non-round start time.</td></tr>
+            <tr><td><code>mean</code> / <code>max</code></td><td><code>avg</code> / <code>max</code> over typed numeric columns</td><td>Nulls, precision, and implicit field typing change results.</td><td>Null, integer, decimal, and extreme-value rows.</td></tr>
+            <tr><td><code>last</code></td><td>Ordered selection with an explicit tie-breaker</td><td>Two values at one timestamp make “last” nondeterministic.</td><td>Duplicate timestamps with different insertion order.</td></tr>
+            <tr><td><code>fill(null|previous|0)</code></td><td>Gap series plus explicit null/forward-fill/zero policy</td><td>Missing bucket, missing field, and zero are different states.</td><td>Leading gap, interior gap, null value, and true zero.</td></tr>
+            <tr><td>Tag and template-variable filters</td><td>Typed dimension predicates with parameter binding</td><td>Case, escaping, empty selections, and high-cardinality plans drift.</td><td>Quotes, wildcard-like text, empty and 10k-value dimensions.</td></tr>
+            <tr><td>Ad-hoc exploration</td><td>Read-only SQL role plus documented views</td><td>Raw schema may be technically queryable but operationally unusable.</td><td>Timed operator tasks: filter, aggregate, join metadata, explain result.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="card vendor" data-tweak-id="workload.retention-downsampling" data-tweak-kind="lifecycle-design">
+        <h3><span class="badge proposed">proposed</span> Retention and downsampling ladder</h3>
+        <p><strong>Raw window:</strong> retain raw samples for the owner-approved troubleshooting period. <strong>Downsampled window:</strong> preserve only aggregates whose exact query semantics are proven against raw fixtures. <strong>Expiry:</strong> remove data through an owned, observable policy or scheduled job. The POC must verify which TimescaleDB policies/functions exist in the activated Azure extension version; it must not infer them from generic Timescale documentation.</p>
+        <p><strong>Gate:</strong> before any deletion test, record current Influx retention, legal/governance requirements, dashboard lookback, ad-hoc needs, and restore interaction. Until then, no target retention number is approved.</p>
+      </section>
+      </details>
+    </section>
+
+    <section class="section" id="provisioning" data-tweak-id="poc.provisioning-security-network" data-tweak-kind="provisioning-plan" aria-labelledby="provisioning-title">
+      <span class="section-number">06 · Provisioning, activation, security &amp; networking</span>
+      <h2 id="provisioning-title">A database resource is the first dependency, not the migration.</h2>
+      <p class="section-intro">Terraform should own the managed service lifecycle; Helm/GitOps should own workload configuration. The POC proves the seam between them, including private reachability, extension activation, credentials, restart behavior, and evidence export.</p>
+      <details class="section-details"><summary>Open provisioning detail</summary>
+
+      <div class="phase-list" data-tweak-id="provisioning.activation-sequence" data-tweak-kind="ordered-plan">
+        <article class="phase" data-tweak-id="provisioning.phase.owner" data-tweak-kind="plan-phase">
+          <h3>Confirm canonical owner and target environment</h3>
+          <p><span class="badge source">source</span> Current source-declared placement is <code>Eneco.Vpp.Aggregation.Infrastructure</code> for Sandbox and <code>Eneco.Vpp.Aggregation.Infrastructure.Mc</code> for MC dev/acc/prd, unless live inventory identifies a shared-service owner.</p>
+        </article>
+        <article class="phase" data-tweak-id="provisioning.phase.network" data-tweak-kind="plan-phase">
+          <h3>Provision an isolated server on the approved private path</h3>
+          <p><span class="badge proposed">proposed</span> Define server, database, approved private connectivity, DNS, TLS enforcement, monitoring export, backup configuration, tags, budget attribution, and explicit public-ingress denial. Validate the actual network mode and region/SKU combination in Azure.</p>
+        </article>
+        <article class="phase" data-tweak-id="provisioning.phase.allowlist" data-tweak-kind="plan-phase">
+          <h3>Allowlist the TimescaleDB extension</h3>
+          <p><span class="badge vendor">vendor</span> Flexible Server requires an extension to be allowlisted before creation. Record the exact server parameter, PostgreSQL major version, and TimescaleDB version returned by the target.</p>
+        </article>
+        <article class="phase" data-tweak-id="provisioning.phase.preload" data-tweak-kind="plan-phase">
+          <h3>Add the library and restart deliberately</h3>
+          <p><span class="badge vendor">vendor</span> Microsoft documents adding the library to <code>shared_preload_libraries</code>; the parameter is static, so the server must restart. Capture availability impact and configuration parity after restart.</p>
+        </article>
+        <article class="phase" data-tweak-id="provisioning.phase.create-extension" data-tweak-kind="plan-phase">
+          <h3>Create and inventory the extension</h3>
+          <p><span class="badge vendor">vendor</span> A database owner creates the extension in the target database. Capture <code>SELECT extversion</code>, available functions, licensing edition, and a minimal hypertable creation probe; revoke owner privileges from runtime roles afterward.</p>
+        </article>
+        <article class="phase" data-tweak-id="provisioning.phase.workload" data-tweak-kind="plan-phase">
+          <h3>Deliver runtime configuration to seven apps</h3>
+          <p><span class="badge proposed">proposed</span> Extend the existing Key Vault → CSI → Kubernetes Secret pattern or an approved identity alternative. Roll out per application; verify endpoint, database, role, certificate mode, pool limits, sink mode, and kill switch without embedding credentials in Helm or logs.</p>
+        </article>
+      </div>
+
+      <div class="grid-2">
+        <section class="card accent" data-tweak-id="security.role-model" data-tweak-kind="security-control">
+          <h3>Database roles</h3>
+          <ul>
+            <li><strong>Owner/admin:</strong> platform-controlled, no application use.</li>
+            <li><strong>Migrator:</strong> schema and policy changes only in deployment window.</li>
+            <li><strong>Writer:</strong> insert/batch privileges on target tables; no DDL.</li>
+            <li><strong>Grafana reader:</strong> select on approved views; no raw secret/config access.</li>
+            <li><strong>Comparator:</strong> time-bounded read access to raw POC data.</li>
+          </ul>
+        </section>
+        <section class="card accent" data-tweak-id="security.network-boundary" data-tweak-kind="security-control">
+          <h3>Network and transport</h3>
+          <ul>
+            <li>No public application ingress; prove with positive and negative connectivity tests.</li>
+            <li>Private DNS resolves from every participating workload namespace.</li>
+            <li>TLS verification is mandatory; reject plaintext and invalid certificate paths.</li>
+            <li>Egress is restricted to the approved server endpoint and port.</li>
+            <li>Server logs and metrics export to a plane that survives database failure.</li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="provisioning.configuration-contract" data-tweak-kind="ownership-table">
+          <caption>Source → derived → consumer contract</caption>
+          <thead><tr><th scope="col">Source of truth</th><th scope="col">Derived surface</th><th scope="col">Consumer / validator</th><th scope="col">Blocked residual</th></tr></thead>
+          <tbody>
+            <tr><td>Aggregation infrastructure Terraform</td><td>Server, network, DNS, monitoring, backup, Key Vault references</td><td>Azure control plane + plan/apply evidence</td><td>Live canonical owner and policy pipeline unqueried.</td></tr>
+            <tr><td>Server parameter configuration</td><td>Extension allowlist + preloaded library</td><td>Restarted PostgreSQL server + extension inventory query</td><td>Available version and upgrade combinations unknown.</td></tr>
+            <tr><td>Key Vault secret or approved identity</td><td>CSI-mounted Kubernetes Secret / workload identity binding</td><td>Seven application Deployments + negative secret-leak scan</td><td>Final authentication choice and rotation owner unknown.</td></tr>
+            <tr><td>Schema migrations</td><td>Hypertables, indexes, views, retention/aggregate policies</td><td>Migrator role + schema diff + query fixtures</td><td>Target-version feature inventory not yet probed.</td></tr>
+            <tr><td>Grafana provisioning</td><td>PostgreSQL data source and translated dashboards</td><td>Grafana renderer + panel parity harness</td><td>Live-only dashboard/alert inventory incomplete.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="migration" data-tweak-id="poc.migration-rollback" data-tweak-kind="migration-plan" aria-labelledby="migration-title">
+      <span class="section-number">07 · Migration, dual-write &amp; rollback</span>
+      <h2 id="migration-title">Cut over authority in steps; never move data and trust in one motion.</h2>
+      <p class="section-intro">Dual-write is an experiment instrument, not proof by itself. It must isolate failures, assign identity to comparisons, and expose whether differences come from writer loss, time-window semantics, dashboard translation, or retention.</p>
+      <details class="section-details"><summary>Open migration and rollback detail</summary>
+
+      <div class="phase-list" data-tweak-id="migration.stages" data-tweak-kind="ordered-plan">
+        <article class="phase" data-tweak-id="migration.phase.baseline" data-tweak-kind="migration-phase">
+          <h3>Baseline · Influx-only authority</h3>
+          <p>Inventory active endpoints, bucket policy, all writer shapes, actual rates/cardinality, Grafana panels/variables/alerts, and operational performance. Freeze deterministic test windows and fixtures.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.synthetic" data-tweak-kind="migration-phase">
+          <h3>Synthetic replay · candidate isolated</h3>
+          <p>Replay known records into PostgreSQL without touching application traffic. Prove activation, schema, query semantics, retention mechanics, and comparator accuracy, including deliberately corrupted controls.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.dual-write" data-tweak-kind="migration-phase">
+          <h3>Shadow write · Influx authoritative, PostgreSQL observed</h3>
+          <p>Enable the bounded candidate sink on one low-risk application, then expand by explicit wave. Compare complete time windows only after allowed lateness; inject PostgreSQL failure before adding the next workload.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.shadow-read" data-tweak-kind="migration-phase">
+          <h3>Shadow read · duplicated dashboards, no operator authority</h3>
+          <p>Run translated Grafana dashboards beside the current versions. Compare panel values, gaps, freshness, latency, variables, alert behavior, and ad-hoc tasks without changing operational links.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.authority" data-tweak-kind="migration-phase">
+          <h3>Reader authority · PostgreSQL dashboards, Influx safety net</h3>
+          <p>Only after acceptance gates pass, switch an explicitly scoped reader cohort while dual-write continues. Restore Influx dashboards immediately if parity, freshness, or operations regress.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.writer-cutover" data-tweak-kind="migration-phase">
+          <h3>Writer authority · candidate primary, Influx reversible</h3>
+          <p>Requires a separate human decision record. Keep the Influx deployment, configuration, and re-enable path intact for the agreed soak; verify rollback from an injected candidate outage.</p>
+        </article>
+        <article class="phase" data-tweak-id="migration.phase.retirement" data-tweak-kind="migration-phase">
+          <h3>Retirement · supersede, then remove</h3>
+          <p>Decommission only after live-consumer inventory, retention/export obligations, rollback soak, cost, support ownership, and restore evidence close. Archive evidence and explicitly accept any historical data not migrated.</p>
+        </article>
+      </div>
+
+      <div class="callout danger" data-tweak-id="migration.dual-write-safety" data-tweak-kind="risk">
+        <p><strong>Dual-write can look safer while increasing blast radius.</strong> A synchronous fan-out, shared connection budget, unbounded retry queue, or log storm can make candidate failure slow the authoritative path. The failure-injection gate must black-hole the database, exhaust its pool, force restart, and deny credentials while business traffic continues.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="migration.rollback-triggers" data-tweak-kind="rollback-table">
+          <caption>Rollback is a tested route, not a sentence in the plan</caption>
+          <thead><tr><th scope="col">Trigger</th><th scope="col">Immediate action</th><th scope="col">Authority after rollback</th><th scope="col">Evidence retained</th></tr></thead>
+          <tbody>
+            <tr><td>Business latency/error regression or memory growth</td><td>Disable candidate branch for affected apps; preserve bounded failure telemetry.</td><td>Influx writer and dashboards.</td><td>App/runtime metrics, queue depth, database/network errors, config revision.</td></tr>
+            <tr><td>Write parity below gate</td><td>Stop rollout wave; retain candidate data read-only for diagnosis.</td><td>Influx writer and dashboards.</td><td>Window manifest, comparison keys, missing/extra/mismatched rows.</td></tr>
+            <tr><td>Dashboard semantic or freshness regression</td><td>Restore original Grafana links/data source; keep shadow comparison.</td><td>Influx dashboards.</td><td>Panel queries, rendered values, edge fixtures, query plans, latency traces.</td></tr>
+            <tr><td>Security, identity, or private-network control fails</td><td>Revoke candidate workload access and stop POC.</td><td>Influx path; candidate quarantined.</td><td>Policy output, role grants, network test, secret rotation/audit logs.</td></tr>
+            <tr><td>Restore/upgrade/ownership gate fails</td><td>No production cutover; either redesign or close POC as no-go.</td><td>Influx path.</td><td>Restore transcript, timings, version matrix, incident ownership gap.</td></tr>
+            <tr><td>Measured cost exceeds accepted envelope</td><td>Stop scale-out; test a bounded alternative only if it preserves other gates.</td><td>Influx path.</td><td>Azure invoice/export inputs, device count, workload, retention and operator-time model.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="observability" data-tweak-id="poc.observability-dashboards" data-tweak-kind="observability-plan" aria-labelledby="observability-title">
+      <span class="section-number">08 · Observability &amp; dashboards</span>
+      <h2 id="observability-title">Measure the path from emitted fact to human answer.</h2>
+      <p class="section-intro">Server CPU is not the user outcome. The POC must join application emission, writer handling, persisted row, query result, rendered panel, and operator diagnosis into one timestamped evidence chain.</p>
+      <details class="section-details"><summary>Open observability detail</summary>
+
+      <div class="grid-4">
+        <article class="card accent" data-tweak-id="observability.layer.application" data-tweak-kind="observability-layer">
+          <h3>Application</h3>
+          <p>Emitted, enqueued, dropped, batch size, attempt, timeout, queue depth, and caller latency—split by app and measurement without leaking business identifiers.</p>
+        </article>
+        <article class="card accent" data-tweak-id="observability.layer.database" data-tweak-kind="observability-layer">
+          <h3>Database</h3>
+          <p>Connections, statement latency/errors, rows, storage growth, index size, locks, maintenance, restart, backup, restore, and extension/version state.</p>
+        </article>
+        <article class="card accent" data-tweak-id="observability.layer.query" data-tweak-kind="observability-layer">
+          <h3>Query</h3>
+          <p>Panel/query identity, p50/p95/p99 latency, scanned rows/bytes, plan shape, result count, gap semantics, cache state, and data freshness.</p>
+        </article>
+        <article class="card accent" data-tweak-id="observability.layer.operator" data-tweak-kind="observability-layer">
+          <h3>Operator</h3>
+          <p>Alert delivery, runbook route, owner acknowledgement, diagnosis time, rollback/restore action, and resolution evidence.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="observability.dashboard-inventory" data-tweak-kind="dashboard-table">
+          <caption>Repository-visible dashboard closure ledger</caption>
+          <thead><tr><th scope="col">Dashboard</th><th scope="col">Inventory required</th><th scope="col">Parity proof</th><th scope="col">Current status</th></tr></thead>
+          <tbody>
+            <tr><td>D-01</td><td>Name, owner, panels, variables, alerts, lookback, measurements, query text.</td><td>Panel-by-panel values, gaps, variables, freshness, render and query latency.</td><td><span class="badge unknown">not inventoried</span></td></tr>
+            <tr><td>D-02</td><td>Name, owner, panels, variables, alerts, lookback, measurements, query text.</td><td>Panel-by-panel values, gaps, variables, freshness, render and query latency.</td><td><span class="badge unknown">not inventoried</span></td></tr>
+            <tr><td>D-03</td><td>Name, owner, panels, variables, alerts, lookback, measurements, query text.</td><td>Panel-by-panel values, gaps, variables, freshness, render and query latency.</td><td><span class="badge unknown">not inventoried</span></td></tr>
+            <tr><td>D-04</td><td>Name, owner, panels, variables, alerts, lookback, measurements, query text.</td><td>Panel-by-panel values, gaps, variables, freshness, render and query latency.</td><td><span class="badge unknown">not inventoried</span></td></tr>
+            <tr><td>Live/ad-hoc</td><td>Grafana API, alerts, shared links, notebooks, scripts, operator interviews.</td><td>Named disposition: migrate, retire with approval, or block cutover.</td><td><span class="badge unknown">unbounded</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="callout" data-tweak-id="observability.independence" data-tweak-kind="invariant">
+        <p><strong>Monitoring independence.</strong> Candidate writer drop/error alerts and the business-latency gate must remain observable when PostgreSQL and its Grafana data source are unavailable. If the candidate database stores the only evidence of its own outage, the verification method can pass while operations are blind.</p>
+      </section>
+      </details>
+    </section>
+
+    <section class="section" id="recovery" data-tweak-id="poc.ha-backup-restore" data-tweak-kind="recovery-plan" aria-labelledby="recovery-title">
+      <span class="section-number">09 · HA, backup &amp; restore</span>
+      <h2 id="recovery-title">A managed service removes chores only after recovery is owned.</h2>
+      <p class="section-intro">The POC must prove the selected region/SKU topology, restart behavior, backup scope, restore permissions, extension state, connection recovery, and operator route. Generic PaaS claims do not close these gates.</p>
+      <details class="section-details"><summary>Open recovery detail</summary>
+
+      <div class="table-wrap">
+        <table data-tweak-id="recovery.failure-matrix" data-tweak-kind="recovery-table">
+          <caption>Failure and recovery matrix</caption>
+          <thead><tr><th scope="col">Failure / action</th><th scope="col">Expected if design is sound</th><th scope="col">Meaningfully different failure</th><th scope="col">Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Planned parameter restart</td><td>Writer isolates reconnect; operational flow stays at baseline; extension and configuration return.</td><td>Caller latency/errors grow, queue is unbounded, or extension state drifts.</td><td>App traces, queue curve, server events, post-restart parameter/extension inventory.</td></tr>
+            <tr><td>Server/network unavailability</td><td>Finite attempts, accounted sample loss, independent alert, automatic or operator-led reconnect.</td><td>Silent loss, retry storm, memory growth, Influx impact, or no alert.</td><td>Fault window, counters, memory/CPU, business SLI, recovered write timestamp.</td></tr>
+            <tr><td>Credential revocation/rotation</td><td>Old credential stops; new credential activates through controlled rollout; no admin privilege at runtime.</td><td>Both remain valid indefinitely, rollout requires image change, or app logs secrets.</td><td>Role audit, secret revisions, negative auth test, leak scan.</td></tr>
+            <tr><td>Point-in-time restore to isolated target</td><td>Target becomes queryable with expected extension/schema and a measurable recovery point.</td><td>Restore cannot create required objects, extension is absent/incompatible, or permissions block ownership.</td><td>Restore transcript, timestamps, row/hash/query checks, permission record.</td></tr>
+            <tr><td>Region/zone availability event</td><td>Selected HA design meets owner-approved RTO/RPO without changing fail-open behavior.</td><td>Topology is unavailable for chosen SKU/region or recovery exceeds target.</td><td>Azure configuration, exercise or provider-supported simulation, RTO/RPO measurement.</td></tr>
+            <tr><td>Major-version / extension upgrade rehearsal</td><td>Supported source/target path is documented and rehearsed on a restored copy.</td><td>Microsoft's source/target limitations block in-place upgrade or extension compatibility.</td><td>Version matrix, rehearsal transcript, rollback path, service-owner acceptance.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn" data-tweak-id="recovery.restore-boundary" data-tweak-kind="constraint">
+        <p><span class="badge vendor">vendor</span> Microsoft documents service-specific restore permission considerations and warns that TimescaleDB is not supported for every source/target combination in Flexible Server's in-place major-version upgrade feature. Treat version selection and upgrade topology as POC evidence, not future cleanup.</p>
+      </div>
+
+      <div class="grid-3">
+        <article class="gate-card blocked" data-tweak-id="gate.recovery.rto-rpo" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">blocked</span>
+          <h3>RTO / RPO</h3>
+          <p>Named owner must ratify numeric targets before restore testing. Record measured recovery point and time; “restore succeeded” alone is not a pass.</p>
+        </article>
+        <article class="gate-card open" data-tweak-id="gate.recovery.extension" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">open</span>
+          <h3>Extension continuity</h3>
+          <p>Restored database reports the expected TimescaleDB version and executes the dashboard parity suite without manual schema repair.</p>
+        </article>
+        <article class="gate-card open" data-tweak-id="gate.recovery.operator" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">open</span>
+          <h3>Operator recovery</h3>
+          <p>An on-call operator follows the runbook from alert to diagnosis and recovery; timings and ambiguity are recorded.</p>
+        </article>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="cost" data-tweak-id="poc.cost-model" data-tweak-kind="cost-model" aria-labelledby="cost-title">
+      <span class="section-number">10 · Cost model</span>
+      <h2 id="cost-title">Price the measured workload and the ownership it creates.</h2>
+      <p class="section-intro">The AL010 envelope is approximately €1 per active device per month. The denominator, forecast horizon, retention, redundancy, backup, and operator-time allocation must be fixed before a green cost result means anything.</p>
+      <details class="section-details"><summary>Open cost model</summary>
+
+      <div class="formula">
+        €/device/month = (compute + storage + backup + network + monitoring + shared operations) ÷ active devices
+      </div>
+
+      <div class="table-wrap">
+        <table data-tweak-id="cost.input-model" data-tweak-kind="cost-table">
+          <caption>Cost inputs to capture from the POC and forecast</caption>
+          <thead><tr><th scope="col">Input</th><th scope="col">Measured basis</th><th scope="col">Sensitivity to model</th><th scope="col">Owner</th></tr></thead>
+          <tbody>
+            <tr><td>Compute</td><td>Chosen tier, vCores, memory, HA replica, utilization, reserved pricing assumption.</td><td>Peak ingest/query concurrency, connection count, compression/aggregate work.</td><td>Platform + FinOps</td></tr>
+            <tr><td>Raw storage</td><td>Bytes/day by measurement, index ratio, growth, retained days.</td><td>Device count, telemetry cadence, row width, schema option.</td><td>Application + data owner</td></tr>
+            <tr><td>Downsampled storage</td><td>Aggregate rows/bytes per period and lookback.</td><td>Bucket granularity, dimensions, retained years.</td><td>Dashboard/data owner</td></tr>
+            <tr><td>Backup / restore</td><td>Backup footprint, retention, restored copies, egress if any.</td><td>RPO/RTO, environment count, restore rehearsal cadence.</td><td>Service owner</td></tr>
+            <tr><td>Network</td><td>Private connectivity and cross-boundary data volume.</td><td>Placement, environments, Grafana location, comparator traffic.</td><td>Network + FinOps</td></tr>
+            <tr><td>Monitoring</td><td>Metrics/log/event volume and retention outside candidate DB.</td><td>Cardinality, sampling, failure logging, dashboard count.</td><td>SRE + FinOps</td></tr>
+            <tr><td>Operations</td><td>On-call, patch/upgrade, restore, schema, query, incident and access work.</td><td>Ownership split, automation, extension constraints, failure frequency.</td><td>Service owner</td></tr>
+            <tr><td>Denominator</td><td>Monthly active devices at current, 1-year, and stress forecast.</td><td>Idle capacity and step changes in server sizing.</td><td>Product/AL010 owner</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="callout" data-tweak-id="cost.acceptance-rule" data-tweak-kind="acceptance-gate">
+        <p><strong>Cost gate.</strong> Run the model at current device count, expected 12-month growth, and a low-denominator scenario. Pass only when the total is approximately ≤ €1 per active device per month under the owner-approved allocation method and no omitted operational cost is material. A discounted POC SKU is not production evidence.</p>
+      </section>
+      </details>
+    </section>
+
+    <section class="section" id="experiments" data-tweak-id="poc.experiment-matrix" data-tweak-kind="experiment-plan" aria-labelledby="experiments-title">
+      <span class="section-number">11 · Experiment matrix &amp; acceptance gates</span>
+      <h2 id="experiments-title">Every green claim must reject a plausible wrong system.</h2>
+      <p class="section-intro">Confirmed AL010 constraints are labeled “inherited.” Numeric tolerances introduced by this design are “proposed” and require owner ratification before the experiment runs. Changing a threshold after seeing results invalidates that gate unless the decision record explains why.</p>
+      <details class="section-details"><summary>Open the 12-gate evidence matrix</summary>
+      <div class="table-wrap">
+        <table data-tweak-id="experiments.matrix" data-tweak-kind="experiment-matrix">
+          <caption>POC closure matrix — method, threshold, negative control, evidence</caption>
+          <thead><tr><th scope="col">ID / question</th><th scope="col">Method</th><th scope="col">Pass threshold</th><th scope="col">Plausibly wrong control</th><th scope="col">Evidence produced</th></tr></thead>
+          <tbody>
+            <tr data-tweak-id="experiment.activation" data-tweak-kind="acceptance-gate"><td><strong>X-01</strong><br>Can the target activate it?</td><td>Provision through target IaC path; allowlist, preload, restart, create extension, create minimal hypertable.</td><td><span class="badge gate">exact</span> Version and configuration recorded; post-restart extension and probe query pass from approved network.</td><td>Test before allowlist/preload and from denied network; both must fail for the expected reason.</td><td>IaC plan/apply, parameter inventory, restart event, SQL transcript, network tests.</td></tr>
+            <tr data-tweak-id="experiment.schema" data-tweak-kind="acceptance-gate"><td><strong>X-02</strong><br>Do nine contracts map?</td><td>Inventory all ten exporters; map every tag/field/type/time/null/unit to both schema options.</td><td><span class="badge gate">exact</span> 100% field-level disposition; zero unresolved type/unit/identity items before DDL freeze.</td><td>Generic JSON control must demonstrate that “accepted rows” does not prove query/governance fitness.</td><td>Signed mapping ledger, DDL, fixture load, schema-option comparison.</td></tr>
+            <tr data-tweak-id="experiment.write-parity" data-tweak-kind="acceptance-gate"><td><strong>X-03</strong><br>Are writes equivalent?</td><td>Replay deterministic fixtures, then dual-write complete live windows with lateness cutoff.</td><td><span class="badge gate">exact</span> Synthetic: 100% multiset equivalence. <span class="badge proposed">proposed</span> Live: ≥99.99% accounted records and 100% explained mismatches.</td><td>Suppress one candidate batch and duplicate another; comparator must classify both.</td><td>Window manifests, missing/extra/value mismatch sets, writer receipts, rates.</td></tr>
+            <tr data-tweak-id="experiment.fail-open" data-tweak-kind="acceptance-gate"><td><strong>X-04</strong><br>Does failure remain monitoring-only?</td><td>Black-hole DNS/network, exhaust pool, restart server, revoke credential under representative traffic.</td><td><span class="badge source">inherited</span> No new business errors. <span class="badge proposed">proposed</span> p99 caller-latency regression ≤2%; memory remains within baseline envelope; every lost sample accounted.</td><td>A deliberately synchronous/unbounded writer must breach at least one threshold, proving the test discriminates.</td><td>Business SLI, app CPU/memory, queue curve, drops, logs, Influx continuity.</td></tr>
+            <tr data-tweak-id="experiment.dashboard-parity" data-tweak-kind="acceptance-gate"><td><strong>X-05</strong><br>Do dashboards mean the same thing?</td><td>Translate every panel in four dashboards; run fixed windows plus boundary/null/gap/tie/DST fixtures.</td><td><span class="badge gate">exact</span> 100% panel disposition and fixture equivalence; every intentional difference approved by dashboard owner.</td><td>Use an inclusive upper bound and nondeterministic “last”; fixtures must fail.</td><td>Query pairs, result diffs, screenshots/render output, owner disposition.</td></tr>
+            <tr data-tweak-id="experiment.freshness-latency" data-tweak-kind="acceptance-gate"><td><strong>X-06</strong><br>Is it visible and responsive?</td><td>Measure emission → persisted → queried → rendered across normal, peak, and maintenance load.</td><td><span class="badge source">inherited</span> p95 end-to-end visibility ≤60s. <span class="badge proposed">proposed</span> dashboard query p95 ≤2s and p99 ≤5s for the approved window/cardinality set.</td><td>Warm-cache-only run is invalid; cold/restart and high-cardinality cases must be included.</td><td>Percentiles, workload manifest, query plans, cache/restart state, panel timing.</td></tr>
+            <tr data-tweak-id="experiment.retention" data-tweak-kind="acceptance-gate"><td><strong>X-07</strong><br>Can lifecycle preserve meaning?</td><td>Apply candidate retention/downsampling to a time-shifted fixture and compare raw vs aggregate queries.</td><td><span class="badge gate">owner-set</span> Boundary deletes exactly approved raw range; aggregates match raw semantics; policy failure alerts.</td><td>Off-by-one expiry and aggregate missing one dimension must fail comparison.</td><td>Policy config, before/after row sets, aggregate diffs, alert record.</td></tr>
+            <tr data-tweak-id="experiment.restore" data-tweak-kind="acceptance-gate"><td><strong>X-08</strong><br>Can an operator restore it?</td><td>Point-in-time restore to isolated target; validate roles, extension, schema, rows, queries; execute runbook.</td><td><span class="badge unknown">blocked</span> Owner-signed RTO/RPO required; restored parity suite must pass with no hidden manual repair.</td><td>Table-only export/restore is not a substitute; extension/config/permission checks must expose the gap.</td><td>Restore transcript, measured RTO/RPO, version/config inventory, runbook feedback.</td></tr>
+            <tr data-tweak-id="experiment.security" data-tweak-kind="acceptance-gate"><td><strong>X-09</strong><br>Are boundaries enforceable?</td><td>Positive/negative network, TLS, role, DDL, secret exposure and rotation tests from every app class.</td><td><span class="badge gate">exact</span> Public path denied; TLS verification enforced; runtime cannot DDL/read other schemas; rotation succeeds; no secret in artifacts/logs.</td><td>Attempt from unapproved network and with writer role to create/drop/read prohibited objects.</td><td>Policy output, connection transcripts, grants, audit logs, secret scan.</td></tr>
+            <tr data-tweak-id="experiment.ha-upgrade" data-tweak-kind="acceptance-gate"><td><strong>X-10</strong><br>Is lifecycle supportable?</td><td>Probe selected HA/restart path and rehearse supported PostgreSQL/extension upgrade on a restored copy.</td><td><span class="badge gate">owner-set</span> Meets ratified availability targets; version path and rollback are documented and demonstrated.</td><td>Documentation-only assertion is invalid; incompatible source/target combination must produce no-go.</td><td>Target matrix, exercise transcript, downtime/data-loss measurement, rollback.</td></tr>
+            <tr data-tweak-id="experiment.cost" data-tweak-kind="acceptance-gate"><td><strong>X-11</strong><br>Does the economics fit?</td><td>Extrapolate measured compute/storage/index/backup/network/monitoring and operator inputs at three scales.</td><td><span class="badge source">inherited</span> Approximately ≤€1 per active device/month under approved allocation and forecast.</td><td>Exclude POC discounts and rerun at low device count; outcome must remain explicit.</td><td>Cost worksheet, Azure price/export inputs, workload and denominator manifest.</td></tr>
+            <tr data-tweak-id="experiment.ownership" data-tweak-kind="acceptance-gate"><td><strong>X-12</strong><br>Can Eneco operate it?</td><td>Tabletop alert, access, schema change, restore, upgrade and incident handoff with named roles.</td><td><span class="badge gate">exact</span> Named accountable owner, incident route, runbook, access approver, maintenance and cost owner accepted.</td><td>POC engineer unavailable; on-call must act using durable docs and authorized access.</td><td>RACI, runbook exercise, gaps, approvals, escalation and maintenance calendar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+
+      <div class="grid-3" data-tweak-id="experiments.decision-gates" data-tweak-kind="acceptance-gate-set">
+        <article class="gate-card open" data-tweak-id="gate.continue" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">possible outcome</span>
+          <h3>Continue to migration proposal</h3>
+          <p>All X-01…X-12 gates pass, remaining risks have named owners, and a human records a new decision. This POC design alone cannot produce that outcome.</p>
+        </article>
+        <article class="gate-card open" data-tweak-id="gate.extend" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">possible outcome</span>
+          <h3>Extend the POC</h3>
+          <p>A bounded unknown can change the decision and has a specific probe, owner, timebox, and no production dependency. Thresholds are not relaxed merely to make a result green.</p>
+        </article>
+        <article class="gate-card blocked" data-tweak-id="gate.stop" data-tweak-kind="acceptance-gate">
+          <span class="gate-state">possible outcome</span>
+          <h3>Stop / no-go</h3>
+          <p>Fail-open, query semantics, security, recovery, upgrade, cost, or ownership cannot meet the accepted gate. Influx remains authoritative; evidence is retained for future alternatives.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="unknowns" data-tweak-id="poc.unknowns-owners" data-tweak-kind="unknown-register" aria-labelledby="unknowns-title">
+      <span class="section-number">12 · Explicit unknowns &amp; owners</span>
+      <h2 id="unknowns-title">An unknown without an owner is a delayed outage.</h2>
+      <p class="section-intro">Roles below are accountable placeholders; named individuals must replace them before the corresponding gate starts. “Team to decide” is not ownership.</p>
+      <details class="section-details"><summary>Open blockers and risk register</summary>
+
+      <div class="table-wrap">
+        <table data-tweak-id="unknowns.register" data-tweak-kind="unknown-table">
+          <caption>Decision-blocking unknown register</caption>
+          <thead><tr><th scope="col">ID / unknown</th><th scope="col">Why it can flip the route</th><th scope="col">Accountable owner</th><th scope="col">Closure evidence</th><th scope="col">Due</th></tr></thead>
+          <tbody>
+            <tr><td>U-01 · Active Influx endpoint generation</td><td>Comparing or retiring the wrong endpoint invalidates the migration.</td><td>VPPAL application owner</td><td>Live deployment/config inventory reconciled with Argo and DNS.</td><td>Before baseline</td></tr>
+            <tr><td>U-02 · Current retention/downsampling/backup/restore</td><td>Target parity and cost cannot be defined without the current lifecycle.</td><td>Influx service owner</td><td>Live bucket policies, backup/restore runbook, last tested restore.</td><td>Before schema freeze</td></tr>
+            <tr><td>U-03 · Actual workload envelope</td><td>Rates, cardinality, row width and bursts choose schema and service size.</td><td>VPPAL app + data owner</td><td>Representative window with p50/p95/p99 and growth forecast.</td><td>Week 0</td></tr>
+            <tr><td>U-04 · Full consumer inventory</td><td>Four committed dashboards are not the whole read contract.</td><td>Grafana/data product owner</td><td>API inventory plus operator interviews and explicit dispositions.</td><td>Before shadow read</td></tr>
+            <tr><td>U-05 · Target PostgreSQL/Timescale versions</td><td>Features, upgrades, retention/aggregate APIs and compatibility vary.</td><td>Azure PostgreSQL service owner</td><td>Target probe, extension inventory, supported version/upgrade matrix.</td><td>Week 1</td></tr>
+            <tr><td>U-06 · Canonical IaC and operational owner</td><td>A working POC without lifecycle and incident ownership is not a managed-service gain.</td><td>Platform lead</td><td>Accepted RACI, repository path, pipeline, on-call and maintenance route.</td><td>Before provisioning</td></tr>
+            <tr><td>U-07 · Approved network/authentication pattern</td><td>Connectivity or identity constraints can invalidate the target architecture.</td><td>Network + security owner</td><td>Approved design plus positive/negative live tests and rotation plan.</td><td>Week 1</td></tr>
+            <tr><td>U-08 · RTO/RPO and retention obligations</td><td>Restore and deletion cannot pass against an undefined target.</td><td>Product/data-governance owner</td><td>Signed numeric targets and legal/governance disposition.</td><td>Before recovery test</td></tr>
+            <tr><td>U-09 · Comparison identity</td><td>Without a stable key, the POC can confuse duplicates with loss.</td><td>Application architect</td><td>Collision analysis and deterministic fixture proving classification.</td><td>Before dual-write</td></tr>
+            <tr><td>U-10 · Cost allocation and device denominator</td><td>€/device can be made green or red by changing the denominator.</td><td>FinOps + product owner</td><td>Signed allocation method and current/forecast active-device counts.</td><td>Before cost gate</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="risk-list" data-tweak-id="unknowns.risks" data-tweak-kind="risk-set">
+        <article class="risk-item" data-tweak-id="risk.vendor-proof-collapse" data-tweak-kind="risk">
+          <span class="risk-severity">High · epistemic</span>
+          <p><strong>Vendor support is mistaken for Eneco readiness.</strong> Mitigation: keep X-01 activation, X-10 lifecycle, and X-12 ownership independent. A Microsoft Learn citation cannot pass any of them.</p>
+        </article>
+        <article class="risk-item" data-tweak-id="risk.fail-open-regression" data-tweak-kind="risk">
+          <span class="risk-severity">High · operational</span>
+          <p><strong>The new writer makes monitoring failure block control processing.</strong> Mitigation: bounded resources, separate sinks, injected failure, business SLI gate, and a wrong synchronous-writer control.</p>
+        </article>
+        <article class="risk-item" data-tweak-id="risk.query-false-parity" data-tweak-kind="risk">
+          <span class="risk-severity">High · semantic</span>
+          <p><strong>Happy-path panels match while boundary, gap, null, tie, or timezone behavior differs.</strong> Mitigation: edge fixtures and panel-by-panel owner disposition, not screenshots alone.</p>
+        </article>
+        <article class="risk-item" data-tweak-id="risk.consumer-omission" data-tweak-kind="risk">
+          <span class="risk-severity">High · blast radius</span>
+          <p><strong>Uncommitted dashboards, alerts, notebooks, or scripts disappear at cutover.</strong> Mitigation: live inventory, usage evidence, named retirement approval, and a no-decommission gate.</p>
+        </article>
+        <article class="risk-item" data-tweak-id="risk.managed-toil-shift" data-tweak-kind="risk">
+          <span class="risk-severity">Medium · ownership</span>
+          <p><strong>PaaS moves rather than removes toil.</strong> Mitigation: include extension versions, schema, query tuning, access, restore, upgrade, incidents, and cost in X-12; compare actual owner time with Influx.</p>
+        </article>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="timeline" data-tweak-id="poc.timeline" data-tweak-kind="timeline" aria-labelledby="timeline-title">
+      <span class="section-number">13 · MVP run sequence</span>
+      <h2 id="timeline-title">Four checkpoints; stop as soon as the route is invalid.</h2>
+      <p class="section-intro">Duration follows access and evidence—not a calendar promise. Each checkpoint has one useful output and one explicit stop condition.</p>
+
+      <div class="phase-list" data-tweak-id="timeline.weeks" data-tweak-kind="ordered-plan">
+        <article class="phase" data-tweak-id="timeline.week-zero" data-tweak-kind="timeline-phase"><h3>Baseline</h3><p>Select one exporter, one workload window, and two dashboards; freeze thresholds and owners. <strong>Output:</strong> replay bundle + current results. <strong>Stop if:</strong> no safe boundary or accountable owner.</p></article>
+        <article class="phase" data-tweak-id="timeline.week-one" data-tweak-kind="timeline-phase"><h3>Candidate</h3><p>Provision one isolated private server; activate TimescaleDB; create the smallest typed schema and bounded writer. <strong>Output:</strong> reproducible deployment. <strong>Stop if:</strong> activation, network, or security fails.</p></article>
+        <article class="phase" data-tweak-id="timeline.week-three" data-tweak-kind="timeline-phase"><h3>Shadow test</h3><p>Dual-write the bounded workload; compare facts and two dashboards; measure freshness; black-hole PostgreSQL. <strong>Output:</strong> parity + failure evidence. <strong>Stop if:</strong> VPPAL behavior regresses.</p></article>
+        <article class="phase" data-tweak-id="timeline.week-five" data-tweak-kind="timeline-phase"><h3>Decision</h3><p>Restore the candidate, price the measured footprint, and record go / extend / stop. <strong>Output:</strong> one-page recommendation with evidence links. <strong>Stop after this:</strong> production migration requires a separate decision.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="record" data-tweak-id="poc.decision-record" data-tweak-kind="decision-set" aria-labelledby="record-title">
+      <span class="section-number">14 · Decision record</span>
+      <h2 id="record-title">Record what is decided—and what is deliberately still open.</h2>
+      <p class="section-intro">These entries govern the POC. Any change requires a superseding record with evidence and impact; prose edits must not silently move a gate.</p>
+      <details class="section-details"><summary>Open decision records</summary>
+
+      <div class="grid-2">
+        <article class="card accent" data-tweak-id="decision.scope-poc" data-tweak-kind="decision">
+          <span class="badge proposed">DR-01 · proposed</span>
+          <h3>Run a bounded POC; make no replacement commitment.</h3>
+          <p><strong>Enables:</strong> evidence under real constraints. <strong>Prevents:</strong> architecture-by-vendor-capability. <strong>Costs:</strong> temporary dual infrastructure and engineering time.</p>
+        </article>
+        <article class="card accent" data-tweak-id="decision.preserve-fail-open" data-tweak-kind="decision">
+          <span class="badge source">DR-02 · inherited constraint</span>
+          <h3>Preserve fail-open functional monitoring.</h3>
+          <p><strong>Enables:</strong> safe fault injection. <strong>Prevents:</strong> database failure becoming VPPAL control failure. <strong>Costs:</strong> accepted, observable monitoring loss under outage.</p>
+        </article>
+        <article class="card warn" data-tweak-id="decision.dual-write" data-tweak-kind="decision">
+          <span class="badge proposed">DR-03 · proposed</span>
+          <h3>Use isolated dual-write and shadow reads.</h3>
+          <p><strong>Enables:</strong> deterministic comparison and reversible reader cutover. <strong>Prevents:</strong> big-bang authority transfer. <strong>Costs:</strong> duplicate writes, temporary complexity, and a new comparison identity problem.</p>
+        </article>
+        <article class="card warn" data-tweak-id="decision.schema-competition" data-tweak-kind="decision">
+          <span class="badge proposed">DR-04 · proposed</span>
+          <h3>Compare contract-first and stable-grain schemas.</h3>
+          <p><strong>Enables:</strong> evidence-based schema choice. <strong>Prevents:</strong> premature generic-table optimization. <strong>Costs:</strong> two synthetic implementations before one is retired.</p>
+        </article>
+        <article class="card risk" data-tweak-id="decision.no-decommission" data-tweak-kind="decision">
+          <span class="badge source">DR-05 · constraint</span>
+          <h3>Do not decommission InfluxDB inside the POC.</h3>
+          <p><strong>Enables:</strong> rollback and honest no-go. <strong>Prevents:</strong> evidence collection from becoming irreversible migration. <strong>Costs:</strong> the POC cannot claim lifecycle savings until a later soak.</p>
+        </article>
+        <article class="card vendor" data-tweak-id="decision.vendor-boundary" data-tweak-kind="decision">
+          <span class="badge vendor">DR-06 · evidence rule</span>
+          <h3>Keep vendor, activation, workload, and owner proof separate.</h3>
+          <p><strong>Enables:</strong> claim-safe decisions. <strong>Prevents:</strong> source or documentation checks laundering runtime readiness. <strong>Costs:</strong> more gates remain visibly open.</p>
+        </article>
+      </div>
+
+      <div class="callout" data-tweak-id="decision.final-authority" data-tweak-kind="decision-policy">
+        <p><strong>Final authority.</strong> The POC team supplies evidence and a recommendation. The named human decision owner accepts, extends, or rejects the migration proposal. Passing technical tests does not automatically authorize production cutover.</p>
+      </div>
+      </details>
+    </section>
+
+    <section class="section" id="sources" data-tweak-id="poc.sources" data-tweak-kind="reference-set" aria-labelledby="sources-title">
+      <span class="section-number">15 · Evidence ledger &amp; sources</span>
+      <h2 id="sources-title">Trace every claim to the proof layer it actually reached.</h2>
+      <p class="section-intro">The internal evidence packet is a bounded source snapshot. The Microsoft links are current vendor documentation named by that packet. Live-system and POC outputs do not exist yet.</p>
+      <details class="section-details"><summary>Open sources and proof debt</summary>
+
+      <ol class="source-list">
+        <li data-tweak-id="source.vppal-evidence" data-tweak-kind="source"><strong>E-SRC-01 · VPPAL evidence summary.</strong> Task-local source synthesis covering current mechanism, counts, blast radius, Azure placement, AL010 constraints, POC hypotheses, and explicit live-surface gaps. Proof: source-observed / bounded; runtime: unverified.</li>
+        <li data-tweak-id="source.microsoft-considerations" data-tweak-kind="source"><strong>E-VND-01 · Microsoft Learn:</strong> <a href="https://learn.microsoft.com/en-us/azure/postgresql/extensions/concepts-extensions-considerations">Considerations for PostgreSQL extensions on Azure Database for PostgreSQL Flexible Server</a>. Used for service-specific extension, restore, and upgrade constraints.</li>
+        <li data-tweak-id="source.microsoft-libraries" data-tweak-kind="source"><strong>E-VND-02 · Microsoft Learn:</strong> <a href="https://learn.microsoft.com/en-us/azure/postgresql/extensions/how-to-load-libraries">Preload shared libraries on Azure Database for PostgreSQL Flexible Server</a>. Used for <code>shared_preload_libraries</code> and restart shape.</li>
+        <li data-tweak-id="source.microsoft-extensions" data-tweak-kind="source"><strong>E-VND-03 · Microsoft Learn:</strong> <a href="https://learn.microsoft.com/en-us/azure/postgresql/extensions/concepts-extensions">PostgreSQL extensions in Azure Database for PostgreSQL Flexible Server</a>. Used for the documented TimescaleDB Apache-2 availability and allowlist/create flow.</li>
+        <li data-tweak-id="source.future-live" data-tweak-kind="source"><strong>E-LIVE-01 · Required future evidence.</strong> Azure configuration, extension inventory, OpenShift/Helm/Argo runtime, Influx policies, Grafana inventory, workload measurements, fault injection, restore/upgrade drills, security tests, cost model, owner receipts, and human decision.</li>
+      </ol>
+
+      <div class="epistemic-summary" data-tweak-id="sources.epistemic-debt" data-tweak-kind="epistemic-summary">
+        <div><strong>2</strong> source-backed load-bearing families: current mechanism and source-declared placement.</div>
+        <div><strong>3</strong> vendor documentation sources: extension availability, preload/restart, considerations.</div>
+        <div><strong>12</strong> experiment gates requiring target evidence before a recommendation.</div>
+        <div><strong>10</strong> explicit decision-blocking unknowns with accountable role placeholders.</div>
+      </div>
+
+      <div class="callout danger" data-tweak-id="sources.highest-risk-debt" data-tweak-kind="epistemic-debt">
+        <p><strong>Highest-risk unresolved decisions:</strong> (1) whether the candidate writer can preserve fail-open behavior under real fault and load; (2) whether every current query and live-only consumer can be preserved or deliberately retired; (3) whether Eneco can activate, secure, recover, upgrade, own, and afford the selected target configuration. Until those close, status remains <strong>POC design ready for review; replacement unverified</strong>.</p>
+      </div>
+      </details>
+    </section>
+  </main>
+</div>
+
+<footer class="footer" data-tweak-id="poc.footer" data-tweak-kind="document-status">
+  <div class="footer-inner">
+    <strong>Review target:</strong> comment on the semantic section, decision, risk, table, or gate that must change. Stable <code>data-tweak-id</code> values name meaning rather than layout, so feedback can survive visual revisions.
+  </div>
+</footer>
+</body>
+</html>

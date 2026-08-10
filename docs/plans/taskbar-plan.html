@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweakloop Taskbar — Plan</title>
+<style>
+  body { max-width: 860px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.6 system-ui, sans-serif; color: #1f2937; }
+  section { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  h1 { margin-bottom: 0.25rem; } h2 { margin-top: 0; }
+  .tag { font: 11px ui-monospace, monospace; background: #eef2ff; color: #4338ca; border-radius: 4px; padding: 1px 6px; }
+  kbd { font: 12px ui-monospace, monospace; border: 1px solid #d1d5db; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #f9fafb; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Tweakloop Taskbar</h1>
+<p class="tag">dogfood iteration · reviewed in the live shell · comment to agent from any semantic section</p>
+
+<section data-tweak-id="taskbar.overview" data-tweak-kind="overview">
+  <h2>Overview</h2>
+  <p>A stable, Google-Docs-inspired collaboration workspace: Documents and the
+  active document's outline live together on the left; the immutable artifact
+  remains dominant in the center; one persistent Agent rail on the right keeps
+  comments, their derived tasks, agent progress and chat in a single causal
+  loop. The reviewer never leaves the artifact to discover what is happening.</p>
+</section>
+
+<section data-tweak-id="taskbar.assumptions" data-tweak-kind="assumptions">
+  <h2>Assumptions — correct these first</h2>
+  <ul>
+    <li>Each document is the parent of its own revision-specific semantic outline.</li>
+    <li>At narrow widths, Documents become a horizontal strip and Agent becomes a persistent bottom sheet — neither is stacked after the artifact.</li>
+    <li>Comments are the anchored human input; Tasks are a projection of durable Work, never a second checklist database.</li>
+    <li>Workspace connectivity, agent availability, claim ownership and human acceptance remain separate truths.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="taskbar.layout" data-tweak-kind="whiteboard" data-tweakloop-whiteboard data-tweak-whiteboard-artifact="artifact_bc13beea-6a94-4c40-b95c-21c7455ef2fe" data-tweak-whiteboard-revision="rev_799f7c76-a531-4ac1-bb32-5421b84e38f2" style="height: 400px; padding: 0;"></section>
+
+<section data-tweak-id="taskbar.groups" data-tweak-kind="spec">
+  <h2>Taskbar groups (left → right)</h2>
+  <table>
+    <tr><th>Group</th><th>Contents</th><th>Why it earns the space</th></tr>
+    <tr><td>Identity</td><td>compact Tweakloop mark + human × agent review</td><td>product context without stealing artifact space</td></tr>
+    <tr><td>Revision</td><td>revision selector + ↩ restore icon</td><td>time travel and immutable rollback in one place</td></tr>
+    <tr><td>Mode</td><td>segmented <b>Interact ‖ Comment</b> pill</td><td>the core review switch, always visible</td></tr>
+    <tr><td>Tools</td><td>⛶ fullscreen for documents and diagrams</td><td>one proven tool; no decorative future placeholders</td></tr>
+    <tr><td>Status</td><td>workspace live/reconnecting · theme</td><td>transport truth only; agent state belongs in the Agent rail</td></tr>
+  </table>
+</section>
+
+<section data-tweak-id="taskbar.tasks-panel" data-tweak-kind="spec">
+  <h2>Tasks checklist</h2>
+  <p>The persistent Agent rail renders <b>Tasks</b> as a projection over Work,
+  Intent, Claim and Result: <b>○ queued</b>, <b>◐ working by agent</b> and
+  <b>✓ addressed</b>. The compact Dynamic Tasks summary keeps the selected
+  comment/current claim and remaining count as the visual anchor. Each Task
+  links to its source Comment and semantic target; no copy or client-side task
+  identity exists.</p>
+</section>
+
+<section data-tweak-id="decision.segmented-mode" data-tweak-kind="decision">
+  <h2>Decision: segmented mode control</h2>
+  <p>Interact/Comment becomes a two-segment pill (Docs-style) instead of a
+  toggle button whose label flips. Rationale: a toggle labeled "Mode: Comment"
+  is ambiguous (state or action?); segments show both options and the active
+  one. <b>Push back if you preferred the single button.</b></p>
+</section>
+
+<section data-tweak-id="decision.shortcuts" data-tweak-kind="decision">
+  <h2>Decision: keyboard shortcuts</h2>
+  <p>Proposed: <kbd>E</kbd> toggle mode · <kbd>F</kbd> fullscreen ·
+  <kbd>[</kbd> collapse Documents · <kbd>]</kbd> open the Agent sheet ·
+  <kbd>⌘Enter</kbd> send an anchored comment or chat message. There are no
+  collaboration-panel shortcuts because there are no collaboration modes to switch.</p>
+</section>
+
+<section data-tweak-id="taskbar.risks" data-tweak-kind="risk-set">
+  <h2>Risks</h2>
+  <ul>
+    <li><b>Rail becomes a dashboard</b> — keep the selected comment/current work dominant; collapse old history before adding panels.</li>
+    <li><b>Cross-document leakage</b> — key outlines by viewed revision and drafts/composer state by artifact.</li>
+    <li><b>False live state</b> — workspace transport, connected agent listeners, transient activity, delivery, claim, result and acceptance are independent truths. A connected listener remains <i>Available</i> after <i>thinking</i> or <i>working</i> expires; multiple listeners are reference-counted so one disconnect cannot hide another.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="taskbar.rollout" data-tweak-kind="plan-phase">
+  <h2>Rollout</h2>
+  <p>1) Browser prototype the Documents/artifact/Agent geometry. 2) Submit a
+  real anchored comment here and observe the same Work become the Dynamic Task.
+  3) Harden thread identity, originating-agent assignment, process-scoped
+  leases, reconnect and accept/reopen behind the proven interaction. 4) Use the
+  resulting loop to dogfood the local whiteboard migration as an independent
+  delivery slice. 5) Chrome, e2e, offline and restart proofs gate owner review.</p>
+</section>
+</body>
+</html>

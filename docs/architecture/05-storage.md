@@ -134,3 +134,17 @@ type Store = Readonly<{
 Do not create an ORM.
 
 Use explicit SQL and explicit data transformations.
+
+### 8.4 Runtime automation authority
+
+SQLite stores only runtime-capability and one-use automation-token hashes. Runtime session authority
+is scoped to workspace, active session, declared agent/process, daemon start nonce, and generation;
+handoff, end, resume, or restart invalidates the predecessor. Plaintext runtime capability remains
+in private client custody outside the workspace and never enters an artifact, event, receipt, or
+export.
+
+Automation rows further bind artifact, method, operation, route-set version, normalized semantic
+request hash, and expiry. Token consume, scope revalidation, semantic application receipt lookup,
+draft/object bookkeeping, mutation, and invalidation descriptor commit or roll back together. This
+is capability-holder provenance, not physical model/process authentication; a hostile same-user
+sibling able to read the private capability is outside this boundary.

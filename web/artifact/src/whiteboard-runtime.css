@@ -1,0 +1,114 @@
+[data-tweakloop-whiteboard] {
+  position: relative;
+  min-height: 320px;
+  overflow: clip;
+  border-radius: 14px;
+  background: #f8fafc;
+  isolation: isolate;
+}
+
+[data-tweakloop-whiteboard][data-tweakloop-whiteboard-mode="standalone"] {
+  width: 100%;
+  min-height: min(760px, calc(100dvh - 32px));
+  height: calc(100dvh - 32px);
+}
+
+.tweakloop-whiteboard__mount {
+  position: absolute;
+  inset: 0;
+}
+
+.tweakloop-whiteboard__state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 28px;
+  color: #475467;
+  background: radial-gradient(circle at 48% 42%, rgb(124 58 237 / 10%), transparent 28%), #f8fafc;
+  font:
+    500 14px / 1.5 Inter,
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  text-align: center;
+}
+
+.tweakloop-whiteboard__state[hidden] {
+  display: none;
+}
+
+.tweakloop-whiteboard__pulse {
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
+  border: 2px solid rgb(124 58 237 / 22%);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: tweakloop-whiteboard-spin 700ms linear infinite;
+}
+
+.tweakloop-whiteboard__state--error {
+  color: #7f1d1d;
+  background: #fff7f7;
+}
+
+.tweakloop-whiteboard__state--error strong {
+  color: #991b1b;
+  font-size: 15px;
+}
+
+.tweakloop-whiteboard__state--error code {
+  max-width: 640px;
+  color: #7f1d1d;
+  font:
+    12px / 1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+[data-tweakloop-whiteboard-comment-mode="true"] {
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 32%);
+}
+
+[data-tweakloop-whiteboard] .excalidraw {
+  --color-primary: #6d5bd0;
+  --color-primary-darker: #5a48bc;
+  --color-primary-darkest: #48369c;
+}
+
+@keyframes tweakloop-whiteboard-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  [data-tweakloop-whiteboard] {
+    min-height: 420px;
+    border-radius: 10px;
+  }
+
+  [data-tweakloop-whiteboard][data-tweakloop-whiteboard-mode="standalone"] {
+    min-height: calc(100dvh - 16px);
+    height: calc(100dvh - 16px);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .tweakloop-whiteboard__state {
+    color: #cbd5e1;
+    background:
+      radial-gradient(circle at 48% 42%, rgb(167 139 250 / 16%), transparent 28%), #111827;
+  }
+
+  .tweakloop-whiteboard__state--error {
+    color: #fecaca;
+    background: #2a1518;
+  }
+}

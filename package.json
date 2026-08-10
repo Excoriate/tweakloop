@@ -14,25 +14,38 @@
   "files": [
     "dist",
     "web",
-    "docs"
+    "docs",
+    "skills",
+    "hooks"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && pnpm build:whiteboard && tsc -p tsconfig.json",
+    "build:whiteboard": "node scripts/build-whiteboard.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "playwright test",
     "lint": "biome check .",
     "format": "biome format --write .",
     "tweak": "node dist/cli/index.js"
   },
   "dependencies": {
     "ajv": "^8.17.0",
+    "axe-core": "^4.13.0",
     "better-sqlite3": "^12.0.0",
-    "commander": "^14.0.0"
+    "commander": "^14.0.0",
+    "marked": "^15.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.0",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@playwright/test": "^1.62.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.25.12",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   },

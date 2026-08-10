@@ -1,0 +1,29 @@
+# Applied only after the Probot Settings app is installed:
+# https://github.com/apps/settings
+#
+# The app gives merged changes to this file repository-administration power.
+# Review this file carefully, and do not treat its presence as proof that the
+# settings have been synchronized.
+
+repository:
+  description: Local-first review for humans and coding agents, with immutable revisions and typed feedback.
+  topics: ai-agents, collaboration, developer-tools, human-in-the-loop, local-first
+  private: false
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  has_discussions: true
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
+  delete_branch_on_merge: true
+  enable_vulnerability_alerts: true
+  enable_automated_security_fixes: true
+
+labels:
+  - name: bug
+    color: d73a4a
+    description: Something is not working.
+  - name: enhancement
+    color: a2eeef
+    description: New functionality or improvement.

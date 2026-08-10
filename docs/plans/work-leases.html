@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Plan — Ephemeral work leases, heartbeat/expiry, and work claim --wait</title>
+<style>
+  body { font: 16px/1.55 -apple-system, "Segoe UI", sans-serif; color: #1a1a1a; max-width: 860px; margin: 2rem auto; padding: 0 1.25rem; }
+  h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-top: 2.2rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  section { margin-bottom: 1.25rem; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .875em; background: #f4f4f4; border-radius: 4px; }
+  code { padding: .1em .3em; } pre { padding: .8em 1em; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; }
+  th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f7f7f7; }
+  .badge { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: .12em .5em; border-radius: 999px; margin-left: .5rem; vertical-align: middle; }
+  .badge.decision { background: #fff3d6; color: #7a5200; }
+  .badge.phase { background: #e2edff; color: #1d4fa1; }
+  .rec { background: #f0f7f0; border-left: 3px solid #4a8c4a; padding: .5rem .8rem; margin: .6rem 0; }
+</style>
+</head>
+<body>
+
+<section data-tweak-id="plan.overview" data-tweak-kind="plan-overview">
+  <h1>Ephemeral work leases, heartbeat/expiry, and <code>work claim --wait</code></h1>
+  <p>
+    Today a claimed work item stays claimed forever: if the agent process exits after
+    <code>tweak work claim</code>, the work is stranded and no other agent can pick it up.
+    This is documented as the top Phase 3 remainder (deviation #10 in
+    <em>16-implementation-status.md</em>) and it blocks the Phase 3 exit condition:
+    <strong>"two concurrent fake agents cannot claim the same work, and abandoned work recovers."</strong>
+  </p>
+  <p>This feature adds, per the section 13.3 design:</p>
+  <ul>
+    <li>an <strong>ephemeral lease</strong> attached to every durable <code>work.claimed</code> fact, with a TTL;</li>
+    <li><code>tweak work heartbeat</code> to extend the lease while an agent is actively working;</li>
+    <li><strong>abandoned-work recovery</strong>: an expired lease makes the work claimable again, and the reclaim records a durable <code>work.abandoned</code> fact for the previous claim;</li>
+    <li><code>tweak work claim --wait</code> so agents can block until work exists instead of hand-rolling sleep loops (as the tweakloop skill currently instructs).</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.context.current-state" data-tweak-kind="plan-context" data-tweak-source="docs/architecture/16-implementation-status.md">
+  <h2>Current state (what we build on)</h2>
+  <ul>
+    <li><code>work.created / work.claimed / work.addressed</code> events exist; <code>decide()</code> already enforces atomic single claim and rejects stale-claim completion (<code>src/domain/decide.ts</code>).</li>
+    <li>The transactor is a serialized single writer with injected <code>now</code>/<code>newEventId</code> deps, so domain purity is preserved when time enters a decision.</li>
+    <li><code>work.abandoned</code> is listed as an owed event in the information model — the vocabulary slot is reserved, not yet implemented.</li>
+    <li>The SKILL.md workflow tells agents to poll <code>work claim</code> with manual sleeps — <code>--wait</code> replaces that.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="decision.lease-storage" data-tweak-kind="decision" data-tweak-source="docs/architecture/08-intents-and-work.md">
+  <h2>Decision — where the ephemeral lease lives <span class="badge decision">decision</span></h2>
+  <table>
+    <tr><th>Option</th><th>Trade-off</th></tr>
+    <tr>
+      <td><strong>A. SQLite table <code>work_leases</code></strong> (as sketched in §13.3), excluded from the fact log and from projection rebuilds</td>
+      <td>Leases survive daemon restarts, so a restart doesn't instantly strand or free in-flight work; single-writer transactor keeps lease insert atomic with the <code>work.claimed</code> append. Slightly more storage code.</td>
+    </tr>
+    <tr>
+      <td><strong>B. In-memory map in the daemon</strong></td>
+      <td>Less code, but every daemon restart silently expires all leases — an agent that heartbeats on schedule can still lose its claim, which violates "no silent recovery" in spirit.</td>
+    </tr>
+  </table>
+  <div class="rec"><strong>Recommendation: A.</strong> It matches the architecture doc verbatim, and lease loss then only happens by real expiry, which is always recorded as an explicit <code>work.abandoned</code> fact at reclaim time.</div>
+</section>
+
+<section data-tweak-id="decision.heartbeat-durability" data-tweak-kind="decision">
+  <h2>Decision — heartbeats are ephemeral, not facts <span class="badge decision">decision</span></h2>
+  <p>
+    A heartbeat every ~30 seconds must not append to the event log — it would bloat the append-only
+    fact history with operational noise ("ordering is not wall-clock"; heartbeats carry no meaning worth replaying).
+    Proposed rule: only <code>work.claimed</code>, <code>work.abandoned</code>, and <code>work.addressed</code> are durable facts;
+    heartbeats mutate <em>only</em> the <code>work_leases</code> row (<code>expires_at</code>, <code>last_heartbeat_at</code>).
+  </p>
+  <p>
+    Consequence for the HTTP surface: heartbeat cannot go through the ordinary command → event pipeline
+    (commands there produce facts). It becomes a small auxiliary route,
+    <code>POST /api/v1/work/:workId/heartbeat</code>, CLI-token-gated, in the same spirit as the existing
+    auxiliary routes (<code>/bootstrap-tokens</code>, <code>/shutdown</code>) already recorded as deviations #3.
+  </p>
+</section>
+
+<section data-tweak-id="decision.wait-mechanism" data-tweak-kind="decision" data-tweak-source="docs/architecture/09-agent-cli.md">
+  <h2>Decision — how <code>work claim --wait</code> blocks <span class="badge decision">decision</span></h2>
+  <table>
+    <tr><th>Option</th><th>Trade-off</th></tr>
+    <tr>
+      <td><strong>A. CLI subscribes to the existing SSE stream</strong>; attempts a claim on start and again whenever a <code>work.created</code> / <code>work.abandoned</code> event arrives, with a periodic fallback retry (~15 s) in case the stream drops</td>
+      <td>Near-instant pickup, zero new daemon state, reuses transport the architecture already chose (POST + SSE). Slightly more CLI code.</td>
+    </tr>
+    <tr>
+      <td><strong>B. Daemon-side long-poll endpoint</strong> that parks the request until work exists</td>
+      <td>Simpler client, but reintroduces held-connection state in the daemon — the very thing §29.4 rejected WebSockets for.</td>
+    </tr>
+  </table>
+  <div class="rec"><strong>Recommendation: A.</strong> The wait loop lives entirely in the CLI; the daemon stays stateless about waiting agents. Add <code>--timeout &lt;seconds&gt;</code> (default: wait indefinitely; on timeout exit with <code>{"status":"none"}</code>).</div>
+</section>
+
+<section data-tweak-id="plan.phase.domain" data-tweak-kind="plan-phase">
+  <h2>Phase 1 — Domain <span class="badge phase">src/domain</span></h2>
+  <ul>
+    <li>Add the <code>work.abandoned</code> event: <code>{ workId, claimId, agentId, reason: "lease-expired" | "cancelled" }</code> (reason vocabulary kept open for the future supersede/cancel work).</li>
+    <li>Extend the <code>work.claim</code> decision: the transactor passes lease status (active / expired / none) for each claimed item into <code>decide()</code> alongside <code>now</code>. A claim over an <em>expired</em> lease emits <code>work.abandoned</code> (old claim) + <code>work.claimed</code> (new claim) in one transaction; a claim over an active lease still rejects.</li>
+    <li><code>evolve()</code>: <code>work.abandoned</code> clears the claim on the work state so existing stale-claim completion rejection covers the abandoned agent returning late (it gets <code>work.stale-claim</code>, honest and explicit).</li>
+    <li>No domain change for heartbeat — it never reaches the domain (see decision above).</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.phase.storage" data-tweak-kind="plan-phase">
+  <h2>Phase 2 — Storage <span class="badge phase">src/storage</span></h2>
+  <ul>
+    <li>Migration: <code>work_leases</code> table — <code>work_id</code> (PK), <code>claim_id</code>, <code>agent_id</code>, <code>process_nonce</code>, <code>expires_at</code>, <code>last_heartbeat_at</code> — exactly §13.3's sketch.</li>
+    <li>Lease rows are written in the same transaction as the <code>work.claimed</code> append and deleted on completion/abandonment. The table is ignored by <code>repair --rebuild-projections</code> (it is ephemeral state, not a projection; rebuilding facts never touches it).</li>
+    <li>Default lease TTL: <strong>120 s</strong>, configurable per claim via <code>--lease-ttl</code>. Heartbeat guidance: every 30 s (TTL/4).</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.phase.http-cli" data-tweak-kind="plan-phase">
+  <h2>Phase 3 — HTTP + CLI + skill <span class="badge phase">src/daemon, src/cli</span></h2>
+  <ul>
+    <li><code>POST /api/v1/work/:workId/heartbeat</code> (body: <code>claimId</code>, <code>agentId</code>) → <code>{ expiresAt }</code>; rejects unknown/stale claims explicitly.</li>
+    <li>Claim responses gain <code>leaseExpiresAt</code> so agents know their deadline.</li>
+    <li>CLI: <code>tweak work heartbeat &lt;workId&gt; --claim &lt;claimId&gt; --agent ... --json</code>; <code>tweak work claim --wait [--timeout &lt;s&gt;] [--lease-ttl &lt;s&gt;]</code> per the wait-mechanism decision.</li>
+    <li>Update <code>skills/tweakloop/SKILL.md</code>: replace the sleep-and-retry guidance with <code>--wait</code>, and add the heartbeat obligation for long-running revisions.</li>
+    <li>Update <code>docs/architecture/16-implementation-status.md</code> when the feature lands.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.phase.testing" data-tweak-kind="plan-phase" data-tweak-source="docs/architecture/14-failure-and-testing.md">
+  <h2>Phase 4 — Tests <span class="badge phase">test, e2e</span></h2>
+  <ul>
+    <li><strong>Domain tables</strong>: reclaim of an expired lease emits <code>abandoned + claimed</code>; reclaim of an active lease rejects; completion with an abandoned claim rejects with <code>work.stale-claim</code>; replay of the new events rebuilds identical state.</li>
+    <li><strong>Transactor</strong>: two concurrent claims — exactly one wins and exactly one lease row exists; lease row lifecycle across claim → heartbeat → complete.</li>
+    <li><strong>Crash recovery</strong>: claim, simulate agent death (no heartbeats), advance past TTL, second agent reclaims; the event log shows the full explicit history.</li>
+    <li><strong>e2e</strong>: extend <code>review-loop.spec.ts</code> (or add a sibling spec): agent A claims and goes silent, agent B runs <code>work claim --wait</code>, receives the work after expiry, completes it; the shell sees the completion over SSE.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.risks" data-tweak-kind="plan-risks">
+  <h2>Risks and non-goals</h2>
+  <ul>
+    <li><strong>Clock authority:</strong> only the daemon's clock decides expiry (single process, single writer) — no distributed-clock concerns; agents receive <code>leaseExpiresAt</code> as advisory.</li>
+    <li><strong>TTL too short for real agent work:</strong> revising a large artifact can exceed 120 s, which is why heartbeat exists — but an agent that forgets to heartbeat loses work honestly (recorded as <code>work.abandoned</code>). Mitigation: SKILL.md makes heartbeat an explicit obligation, and the TTL is configurable.</li>
+    <li><strong>Non-goals (deferred, per roadmap):</strong> supersede/cancel commands, <code>dependsOn</code> ordering, evidence objects, human-facing lease UI in the shell beyond showing the abandonment events that already flow over SSE.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.acceptance" data-tweak-kind="plan-acceptance">
+  <h2>Acceptance criteria</h2>
+  <ol>
+    <li>Phase 3 exit condition passes: two concurrent fake agents cannot claim the same work, and abandoned work recovers — proven by the transactor and crash tests above.</li>
+    <li>An abandoned agent returning late gets an explicit <code>work.stale-claim</code> rejection, never a silent overwrite.</li>
+    <li><code>tweak work claim --wait</code> returns within ~1 s of a review batch being submitted (SSE-triggered), and respects <code>--timeout</code>.</li>
+    <li>Full history (claims, abandonments, completions) survives daemon restart and <code>repair --rebuild-projections</code>; the lease table's absence after a wipe is handled by the explicit expiry path, not silent recovery.</li>
+    <li>The event log after the e2e run reads as an honest narrative: created → claimed(A) → abandoned(A, lease-expired) → claimed(B) → addressed(B).</li>
+  </ol>
+</section>
+
+</body>
+</html>

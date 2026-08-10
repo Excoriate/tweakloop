@@ -8,6 +8,8 @@ Covers sections 26, 27 and 28 of the authoritative architecture. Back to the [in
 |---|---|
 | Daemon crashes after command commit | Restart reconstructs projections and clients resume after event sequence |
 | Daemon crashes before commit | No partial durable effect |
+| CLI setup fails before publication | Reject before the first artifact/revision fact; no hidden durable effect |
+| CLI setup fails after publication | Return the exact committed artifact/revision/seq and an executable recovery action; never report an unqualified total failure |
 | CLI retries a successful command | Idempotency receipt returns original response |
 | Browser refreshes | Fetch projection snapshot, then resume event stream |
 | Agent exits before claiming | Work remains claimable |
@@ -84,6 +86,12 @@ Kill the daemon:
 - during browser event delivery.
 
 Verify recovery and idempotent retry.
+
+Also inject client-side failures on both sides of the commit boundary. A pre-publication rejection
+must preserve exact event and projection equality. A post-publication rejection must expose a typed
+committed-result receipt; executing its returned recovery command must reuse the same artifact and
+revision rather than create a second revision. A green retry alone is insufficient because it can
+hide an acknowledgement split-brain.
 
 ### 27.6 Artifact tests
 

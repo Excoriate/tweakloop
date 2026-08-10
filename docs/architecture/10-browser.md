@@ -24,6 +24,12 @@ Ports are assigned dynamically.
 
 The artifact origin exposes no mutation API and receives no shell authentication cookie.
 
+The shell origin is also the human-authority boundary. Human decisions, comments, default-human
+chat, and accepted-work reopening derive their principal from the authenticated browser transport.
+An agent identity string, CLI bearer, or semantic automation token cannot manufacture or redeem
+that authority. A CLI handoff may print the `session url` command, but it does not mint or export the
+single-use browser token while handling the gated action.
+
 ### 15.2 Why two origins
 
 Agent-generated HTML must be treated as untrusted application content.

@@ -76,6 +76,14 @@ The shared vocabulary for code, documents, tests, and conversation. Terms mean e
 
 - **Runtime descriptor** — the ephemeral `runtime.json` (PID, ports, process nonce, protocol version) used to discover a live daemon. A locator, never authoritative state.
 
+- **Human browser authority** — authority derived from the authenticated shell transport for human decisions, comment submission, and human chat actions. An agent label or CLI bearer cannot manufacture it; a gated CLI leaf returns `human.browser-required` and a fresh-shell continuation without mutating.
+
+- **Runtime session authority** — the daemon-generation-bound hash of a private client capability registered by session start/resume. It authorizes the active session holder to request narrowly scoped automation; it is not physical process/model identity and is invalidated by restart, handoff, end, or successor rotation.
+
+- **Automation token** — a short-lived, one-use bearer minted for one runtime/session/agent/process/artifact/method/operation/request tuple. The daemon consumes it in the same transaction as revalidation, application idempotency, and the semantic mutation. It never becomes browser authority.
+
+- **Semantic scene command** — a renderer-independent whiteboard operation addressed by semantic keys (`node`, `edge`, `label`, `group`, `layout`). The daemon owns Excalidraw IDs, versions, nonces, bindings, and geometry; raw renderer and authority fields are outside this command boundary.
+
 - **Shell origin** — the trusted browser origin: review UI, command API, authentication, SSE stream.
 
 - **Artifact origin** — the isolated browser origin serving read-only immutable revision files and the bridge script. No mutation routes, no shell cookie.

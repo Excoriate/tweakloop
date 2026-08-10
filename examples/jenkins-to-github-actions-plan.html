@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrating CI from Jenkins to GitHub Actions</title>
+<style>
+  body { max-width: 820px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.65 system-ui, -apple-system, sans-serif; color: #1f2937; }
+  h1 { font-size: 1.75rem; margin-bottom: .25rem; }
+  .sub { color: #6b7280; margin-top: 0; }
+  section { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  section section { background: #fafafa; margin: .85rem 0; }
+  h2 { margin-top: 0; font-size: 1.2rem; }
+  h3 { margin-top: 0; font-size: 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; margin: .5rem 0; }
+  th, td { border: 1px solid #e5e7eb; padding: .4rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; }
+  code { background: #f3f4f6; padding: .1rem .3rem; border-radius: 3px; font-size: .88em; }
+  .tag { display: inline-block; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase;
+         background: #eef2ff; color: #4338ca; border-radius: 4px; padding: .1rem .4rem; margin-left: .4rem; vertical-align: middle; }
+  .tag.high { background: #fef2f2; color: #b91c1c; }
+  .tag.med { background: #fffbeb; color: #b45309; }
+  ul, ol { margin: .5rem 0; padding-left: 1.25rem; }
+  .assume { border-left: 3px solid #6b7280; background: #f9fafb; padding: .6rem .85rem; margin: .75rem 0; font-size: .95rem; }
+  .assume strong { color: #374151; }
+</style>
+</head>
+<body>
+
+<h1>Migrating CI from Jenkins to GitHub Actions</h1>
+<p class="sub">Plan for review, revision 1. The thesis: migrate <em>build shapes</em>, not jobs — and delete more than you translate.</p>
+
+<section data-tweak-id="plan.overview" data-tweak-kind="overview">
+  <h2>Overview and strategy</h2>
+
+  <p><strong>The trap.</strong> The obvious plan is "translate every Jenkinsfile into a workflow." It fails predictably:
+  most Jenkins estates are a long tail of near-duplicate jobs plus a minority of scripted Groovy pipelines that are
+  genuinely programs. Translating one-to-one reproduces a decade of accumulated workarounds in a new syntax, and the
+  team inherits the same mess with worse tooling familiarity.</p>
+
+  <p><strong>The plan instead.</strong> Three moves, in this order:</p>
+  <ol>
+    <li><strong>Cull.</strong> A large fraction of Jenkins jobs have not run in a year. They are not migration scope,
+    they are deletion scope. This is the cheapest work in the whole programme and it shrinks everything downstream.</li>
+    <li><strong>Collapse.</strong> The surviving jobs almost always reduce to a handful of archetypes — service build,
+    library publish, container image, infrastructure apply. Build one well-made reusable workflow per archetype and
+    most repositories become a ten-line caller file.</li>
+    <li><strong>Rewrite the remainder by hand,</strong> with the owning team, against those reusable workflows. No
+    automated Groovy transpilation — see <code>decision.no-auto-transpile</code>.</li>
+  </ol>
+
+  <p><strong>Sequencing constraint.</strong> Runner and identity foundations (Phase 2) gate everything else. A workflow
+  that cannot reach an internal artifact repository or authenticate to the cloud is not a migrated job, and no amount
+  of YAML quality fixes that. Nothing beyond a pilot moves until Phase 2 is real.</p>
+
+  <p><strong>Shape of the effort.</strong> Phase 1 inventory and cull (~3 weeks) &rarr; Phase 2 runners and identity
+  (~6 weeks, the critical path) &rarr; Phase 3 golden-path workflows (~4 weeks, overlaps Phase 2) &rarr; Phase 4
+  migration waves (~2 quarters, distributed across owning teams, not a central factory) &rarr; Phase 5 per-repo cutover
+  (continuous) &rarr; Phase 6 Jenkins decommission (~4 weeks, gated on a hard date). Roughly two platform engineers for
+  three quarters, plus a few days per repository from each owning team.</p>
+</section>
+
+<section data-tweak-id="plan.assumptions" data-tweak-kind="assumptions">
+  <h2>Assumptions this plan rests on</h2>
+  <p>These are guesses about your estate, written down so they can be corrected rather than silently baked in. Each one
+  changes the plan materially if wrong — replace any that are inaccurate.</p>
+  <div class="assume">
+    <strong>Scale.</strong> On the order of a few hundred Jenkins jobs across one Jenkins controller (or a small number
+    of controllers), with somewhere between a third and a half of them effectively dead.
+  </div>
+  <div class="assume">
+    <strong>Composition.</strong> A mix of declarative <code>Jenkinsfile</code> pipelines, some legacy Freestyle jobs
+    configured through the UI, and at least one Groovy <em>shared library</em> that most pipelines depend on.
+  </div>
+  <div class="assume">
+    <strong>Network.</strong> Builds need access to internal services — an artifact repository, private package
+    registries, possibly a database for integration tests — that are not reachable from GitHub-hosted runners.
+  </div>
+  <div class="assume">
+    <strong>Source of truth.</strong> The code already lives in GitHub (or is being moved there independently). This
+    plan covers CI only; it does not cover repository migration.
+  </div>
+  <div class="assume">
+    <strong>Deployment.</strong> Jenkins does some production deployment, not just build and test. If Jenkins is
+    build-only, Phase 2's identity work and Phase 5's approval mapping shrink dramatically.
+  </div>
+</section>
+
+<section data-tweak-id="plan.phase.inventory" data-tweak-kind="plan-phase">
+  <h2>Phase 1 — Inventory and cull <span class="tag">read-only</span></h2>
+
+  <p>Extract a machine-readable inventory of every job from the Jenkins API
+  (<code>/api/json?tree=jobs[...]</code>, plus <code>config.xml</code> per job) and turn it into a table the platform
+  team and each owning team can argue with.</p>
+
+  <p><strong>Per job, capture:</strong></p>
+  <table>
+    <tr><th>Field</th><th>Why it matters</th></tr>
+    <tr><td>Type — Freestyle / declarative Pipeline / scripted Pipeline / Multibranch / Matrix / Maven / Job DSL-generated</td><td>Determines translation difficulty; Job DSL means the job is generated and the <em>generator</em> is the real migration unit</td></tr>
+    <tr><td>Last successful build, last build, builds in the trailing 12 months</td><td>The cull signal</td></tr>
+    <tr><td>Owning team (from folder, RBAC, or last committer)</td><td>Migration is delegated to owners; unowned jobs are the highest-risk category</td></tr>
+    <tr><td>Plugins referenced by the job's steps</td><td>Plugin usage is the best predictor of translation cost</td></tr>
+    <tr><td>Credential ids consumed (<code>withCredentials</code>, <code>credentialsId</code>)</td><td>Feeds the Phase 2 secret and identity inventory</td></tr>
+    <tr><td>Agent labels used</td><td>Feeds the runner-pool design; reveals hidden dependencies on specific hosts</td></tr>
+    <tr><td>Upstream/downstream triggers, <code>build job:</code> calls, Copy Artifact sources</td><td>Reveals the cross-job graph, which is where migrations break in the middle</td></tr>
+    <tr><td>Shared library imports (<code>@Library</code>)</td><td>Identifies the shared-library blast radius early</td></tr>
+  </table>
+
+  <p><strong>Disposition, assigned to every job:</strong> <code>delete</code> (dead or superseded),
+  <code>fold</code> (fits an archetype, becomes a reusable-workflow caller), <code>rewrite</code> (real logic, needs a
+  human), or <code>keep-on-jenkins</code> (out of scope for now, with a named reason and a review date). Every job gets
+  exactly one, and no job is allowed to be absent from the report.</p>
+
+  <p><strong>Also inventory the plugins themselves.</strong> A plugin-usage histogram across the estate is the single
+  most useful artifact from this phase: it tells you which five plugins to solve properly (and how) and which forty are
+  used once each and can be handled ad hoc.</p>
+
+  <p><strong>Exit criteria:</strong> every job has a disposition and an owner; the <code>delete</code> set has actually
+  been disabled (not yet deleted — disabled, so reversal is one click); the plugin histogram is published; the
+  cross-job dependency graph is drawn.</p>
+</section>
+
+<section data-tweak-id="plan.phase.runners-and-identity" data-tweak-kind="plan-phase">
+  <h2>Phase 2 — Runner and identity foundation <span class="tag">critical path</span></h2>
+
+  <p>This is the phase that actually determines whether the migration succeeds, and the one most plans under-resource
+  because it produces no visible migrated jobs.</p>
+
+  <h3 style="margin-top:1rem">Runners</h3>
+  <p>Jenkins agents are typically long-lived VMs sitting inside the network with ambient access to everything. GitHub
+  Actions runners are ephemeral and, if GitHub-hosted, outside the network entirely. Three options, and most estates
+  need a mix:</p>
+  <table>
+    <tr><th>Option</th><th>Use for</th><th>Cost shape</th></tr>
+    <tr><td>GitHub-hosted runners</td><td>Anything that only needs the internet — most builds, linting, unit tests, public dependencies</td><td>Per-minute; no ops burden</td></tr>
+    <tr><td>Self-hosted via Actions Runner Controller (ARC) on Kubernetes</td><td>Builds needing internal network access; large or specialised hardware</td><td>Your compute + real ops burden; ephemeral pods per job</td></tr>
+    <tr><td>GitHub-hosted larger runners</td><td>Builds that are slow purely for CPU/RAM reasons</td><td>Higher per-minute, no ops burden — often cheaper than it looks against engineer wait time</td></tr>
+  </table>
+  <p>The design decision is in <code>decision.runner-strategy</code>. Whatever the mix, agent <em>labels</em> need an
+  explicit mapping to runner groups and labels, and that mapping should shrink: Jenkins label sprawl is usually
+  historical accident, not requirement.</p>
+
+  <h3 style="margin-top:1rem">Identity and secrets</h3>
+  <p>Jenkins credentials are encrypted in the controller's store and can technically be decrypted by an administrator.
+  Do not do that. Migrate <em>names and consumers</em>, not values:</p>
+  <ul>
+    <li>Produce a secret inventory: credential id, type, which jobs consume it, and a proposed GitHub home
+    (organisation secret, repository secret, or environment secret).</li>
+    <li><strong>Prefer eliminating the secret over moving it.</strong> Every cloud credential that can become OIDC
+    federation should — this migration is the best opportunity you will get to delete long-lived cloud keys, and doing
+    it now costs less than doing it as a follow-up project that never gets scheduled.</li>
+    <li>Humans re-provision the values that remain, directly in GitHub. The migration tooling never reads a secret
+    value.</li>
+    <li>Package registry and artifact repository access moves to short-lived tokens or OIDC where the registry
+    supports it.</li>
+  </ul>
+
+  <p><strong>Exit criteria:</strong> a pilot repository builds and deploys end to end on the new runners using the new
+  identity model, with no credential copied from Jenkins.</p>
+</section>
+
+<section data-tweak-id="plan.phase.golden-paths" data-tweak-kind="plan-phase">
+  <h2>Phase 3 — Golden-path reusable workflows</h2>
+
+  <p>Build a small, well-maintained set of reusable workflows (<code>on: workflow_call</code>) in a dedicated
+  <code>.github</code>-style platform repository, one per archetype identified in Phase 1. A migrated repository should
+  usually end up with a caller file of roughly ten lines.</p>
+
+  <p><strong>Typical archetype set:</strong> service build-and-test, library build-and-publish, container image
+  build-and-push, infrastructure plan-and-apply, and a static-site or docs build. Adjust to what the inventory actually
+  shows — this list is a hypothesis, not a finding.</p>
+
+  <p><strong>Each reusable workflow carries the things you do not want re-litigated per repository:</strong> dependency
+  caching, test result and coverage publishing, artifact retention, required permissions scoped down from the default,
+  SBOM and provenance if applicable, and consistent job naming so branch protection rules stay stable across repos.</p>
+
+  <p><strong>Shared libraries.</strong> The Jenkins Groovy shared library is the piece with no clean equivalent, and it
+  needs a deliberate decomposition rather than a translation:</p>
+  <table>
+    <tr><th>Shared library content</th><th>GitHub Actions home</th></tr>
+    <tr><td>Whole-pipeline templates (<code>buildJavaService()</code>)</td><td>Reusable workflow</td></tr>
+    <tr><td>Reusable step sequences</td><td>Composite action</td></tr>
+    <tr><td>Real logic — parsing, computation, API calls</td><td>A checked-in script (or a TypeScript action) with its own tests, called from a step</td></tr>
+    <tr><td>Shared constants and configuration</td><td>Organisation variables, or a config file in the platform repo</td></tr>
+    <tr><td>Groovy that exists to work around Jenkins</td><td>Deleted</td></tr>
+  </table>
+  <p>That last row is usually larger than anyone expects, and finding it is a good use of the first rewrite.</p>
+
+  <p><strong>Supply-chain hygiene from day one:</strong> third-party actions pinned to commit SHAs, an organisation
+  allowlist of permitted actions, <code>permissions:</code> declared explicitly at workflow level, and
+  <code>GITHUB_TOKEN</code> defaulted to read-only across the organisation. These are one-time settings that are
+  painful to retrofit after two hundred workflows exist.</p>
+</section>
+
+<section data-tweak-id="plan.phase.migration-waves" data-tweak-kind="plan-phase">
+  <h2>Phase 4 — Migration waves</h2>
+
+  <p>Migration is delegated to owning teams with platform support, not performed centrally. A central factory becomes
+  the bottleneck and, worse, produces workflows nobody feels responsible for.</p>
+
+  <ol>
+    <li><strong>Pilot (2–3 repositories).</strong> Chosen for representativeness rather than ease: one straightforward
+    service, one that deploys to production, one that is awkward. The awkward one is the point — it is what calibrates
+    the estimate for everything else.</li>
+    <li><strong>Wave 1 — the <code>fold</code> set.</strong> Jobs that map onto an archetype. These should take hours,
+    not days, each. If they do not, the golden paths are wrong and Phase 3 needs another pass before the wave
+    continues.</li>
+    <li><strong>Wave 2 — the <code>rewrite</code> set.</strong> Scripted pipelines and genuinely bespoke jobs, done
+    with the owning team, scheduled explicitly rather than squeezed in.</li>
+    <li><strong>Wave 3 — the stragglers.</strong> Unowned jobs, jobs whose owners have left, jobs everyone is afraid
+    of. Handle these by switching them off and seeing who complains, in a window where that is safe. It sounds glib;
+    it is faster and more accurate than archaeology, and the disable-then-restore path makes it cheap to be wrong.</li>
+  </ol>
+
+  <p><strong>Support model:</strong> a migration guide with a worked example per archetype, a dedicated chat channel,
+  and standing office hours. Track progress on a single public dashboard — jobs migrated, jobs remaining, by team.
+  Visible progress is what keeps a long tail moving.</p>
+</section>
+
+<section data-tweak-id="plan.phase.cutover" data-tweak-kind="plan-phase">
+  <h2>Phase 5 — Per-repository cutover</h2>
+
+  <p>Cutover happens per repository, not as a flag day, and runs in three steps with a different rollback at each:</p>
+  <ol>
+    <li><strong>Shadow.</strong> Both systems build every push. Jenkins remains the required status check; the Actions
+    workflow reports but cannot block a merge. Rollback is free. Stay here for an agreed number of green runs rather
+    than an agreed number of days — a repository that builds twice a week needs more calendar time than one that builds
+    forty times a day.</li>
+    <li><strong>Gating swap.</strong> The required status check moves to the Actions workflow; the Jenkins job keeps
+    running but stops gating. Rollback is a branch-protection change, measured in minutes.</li>
+    <li><strong>Retirement.</strong> The Jenkins job is <em>disabled</em>, not deleted, and stays that way through the
+    soak period. Rollback is re-enabling it.</li>
+  </ol>
+
+  <p><strong>Parity, not vibes.</strong> Before a repository leaves shadow mode, compare the two systems on evidence:
+  same exit status across the shadow window, same produced artifact names, test counts within tolerance, and a
+  build-duration comparison. Differences are usually real findings, not noise.</p>
+
+  <p><strong>Two honest limits.</strong> Shadow mode <em>double-executes side effects</em> — two builds may both push
+  an image tag, both write to a shared integration environment, or both send notifications. Every job with an external
+  side effect needs a per-job decision: run shadow with deploy and publish steps stubbed, or skip shadow for that job
+  and accept a sharper cutover. And rollback covers CI configuration only; an artifact published or a deployment made
+  by a bad run is outside the rollback path and stays the team's problem.</p>
+
+  <p><strong>Approvals change shape, mostly for the better.</strong> A Jenkins <code>input</code> step blocks a running
+  build and often an executor with it; the equivalent is a GitHub Environment with required reviewers, which gates a
+  job without holding a runner. Behaviour differs enough to be worth calling out to teams during their cutover:
+  timeouts, who can approve, and what happens on rejection are not the same.</p>
+</section>
+
+<section data-tweak-id="plan.phase.decommission" data-tweak-kind="plan-phase">
+  <h2>Phase 6 — Jenkins decommission</h2>
+
+  <p>An un-decommissioned Jenkins is a migration that did not happen. Two systems means double maintenance, double
+  patching, and a permanent escape hatch back to the old world.</p>
+  <ul>
+    <li><strong>Set the shutdown date at the start of Phase 4,</strong> publicly, and treat it as a real constraint.
+    A date set at the end is a date nobody planned around.</li>
+    <li><strong>Read-only first.</strong> Jenkins goes read-only (no new builds, history browsable) for a defined
+    period before shutdown.</li>
+    <li><strong>Decide what happens to build history</strong> before you need it: which jobs have retention
+    obligations, and whether history is exported to an archive or the controller is snapshotted as a VM image that can
+    be revived if an auditor asks. This is a compliance question, not an engineering one, and it needs an owner outside
+    the platform team.</li>
+    <li><strong>Reclaim what it was using</strong> — agent VMs, controller hosts, licences, plugin subscriptions. This
+    is the number that justifies the programme in a budget conversation, so measure it.</li>
+  </ul>
+</section>
+
+<section data-tweak-id="plan.decisions" data-tweak-kind="decision-set">
+  <h2>Key decisions</h2>
+
+  <section data-tweak-id="decision.no-auto-transpile" data-tweak-kind="decision">
+    <h3>No automated Jenkinsfile-to-workflow transpilation</h3>
+    <p>Tools exist that convert Jenkinsfiles to Actions workflows. This plan does not use them as the primary path.
+    Declarative pipelines are regular enough that conversion is mostly mechanical — and mostly unnecessary, because
+    those are exactly the jobs that should collapse into a golden-path caller instead. Scripted Groovy pipelines are
+    Turing-complete programs; converting them produces workflows that are syntactically valid, semantically
+    approximate, and unmaintainable by the team that has to own them.</p>
+    <p><strong>What we do instead:</strong> classify in Phase 1, fold what fits an archetype, rewrite what does not,
+    and use conversion tooling only as a <em>reading aid</em> for an engineer who is writing the real workflow.</p>
+    <p><strong>What this costs:</strong> more human hours in Phase 4 than a transpile-everything approach appears to
+    need, and the appearance of slower early progress. The trade is that the resulting workflows are ones their owners
+    understand.</p>
+  </section>
+
+  <section data-tweak-id="decision.runner-strategy" data-tweak-kind="decision">
+    <h3>GitHub-hosted by default; self-hosted only where the network requires it</h3>
+    <p>Default to GitHub-hosted runners, and treat every self-hosted runner as a cost with a justification attached.
+    Self-hosted capacity is provisioned through Actions Runner Controller with ephemeral pods, never long-lived VMs —
+    the persistent-agent model is what makes Jenkins agents drift and what makes them a security problem.</p>
+    <p><strong>Why not lift the agent fleet across:</strong> reusing the existing agent VMs as self-hosted runners is
+    tempting and fast, and it carries the entire drift problem into the new system while giving up ephemerality, the
+    main safety property Actions offers.</p>
+    <p><strong>The real constraint</strong> is which builds genuinely need internal network access. Phase 1's inventory
+    answers that, and it is usually a smaller set than teams assume — much of what looks like an internal dependency is
+    a package registry that has a public mirror or a proxy.</p>
+  </section>
+
+  <section data-tweak-id="decision.ownership-model" data-tweak-kind="decision">
+    <h3>Teams own their workflows; the platform team owns the golden paths</h3>
+    <p>The platform team builds and maintains reusable workflows, runners, and the migration guide. Owning teams
+    migrate their own repositories against those. The platform team pairs, reviews, and unblocks — it does not migrate
+    on other teams' behalf except for genuinely unowned jobs.</p>
+    <p><strong>Why:</strong> a central migration factory hits a throughput ceiling immediately, and workflows written
+    by someone else become nobody's responsibility the first time they break at 2am. The counter-argument — that this
+    is slower and less consistent — is answered by the golden paths carrying the consistency, not by the migrator.</p>
+  </section>
+
+  <section data-tweak-id="decision.secrets-and-identity" data-tweak-kind="decision">
+    <h3>Re-provision secrets; federate wherever possible</h3>
+    <p>No credential value is exported from the Jenkins credential store. Names, types, and consumers migrate; humans
+    provision values into GitHub organisation, repository, or environment secrets. Every cloud credential that can be
+    replaced by OIDC federation is replaced during migration rather than deferred.</p>
+    <p><strong>Consequence to plan around:</strong> this makes cutover blocking on humans in a way a copy would not,
+    so the secret inventory has to be produced early (Phase 2) and tracked as its own work queue, with cutover for a
+    repository refused while any of its secrets are outstanding.</p>
+  </section>
+</section>
+
+<section data-tweak-id="plan.risks" data-tweak-kind="risk-set">
+  <h2>Risks</h2>
+
+  <section data-tweak-id="risk.shared-library" data-tweak-kind="risk">
+    <h3>The Groovy shared library is the long pole <span class="tag high">high</span></h3>
+    <p>If most pipelines import a shared library, no repository can fully migrate until the library's capabilities
+    exist on the Actions side. It is a single point of coupling across the whole estate, and it is usually
+    under-documented and maintained by one or two people.</p>
+    <p><strong>Mitigation:</strong> decompose it in Phase 3 (see the mapping table there) <em>before</em> Wave 1 rather
+    than discovering its shape mid-wave; start from the functions the inventory shows are actually called, which is
+    typically a small fraction of what the library exposes; and treat deleting Jenkins-workaround code as a goal of the
+    exercise rather than a loss of fidelity.</p>
+  </section>
+
+  <section data-tweak-id="risk.ephemeral-workspace" data-tweak-kind="risk">
+    <h3>Builds that quietly depend on a persistent workspace <span class="tag high">high</span></h3>
+    <p>Jenkins agents reuse workspaces between builds. Some builds are incremental, fast, or even <em>correct</em> only
+    because of state left behind by the previous run — a populated dependency cache, a built container layer, a
+    generated file nobody remembers generating. Actions runners start clean every time. These failures appear as
+    "works on Jenkins, fails on Actions" with no obvious cause, and they are the most common source of frustration
+    early in a migration.</p>
+    <p><strong>Mitigation:</strong> flush them out early by running the pilot jobs on Jenkins with a clean workspace
+    before migrating, which reproduces the failure in the system the team already understands. Then handle the real
+    dependency explicitly with <code>actions/cache</code> or a build cache service — as a declared input, not an
+    accident.</p>
+  </section>
+
+  <section data-tweak-id="risk.runner-security" data-tweak-kind="risk">
+    <h3>Self-hosted runners with network access are a serious attack surface <span class="tag high">high</span></h3>
+    <p>A self-hosted runner that builds pull requests will execute code from those pull requests inside your network.
+    Combined with a non-ephemeral runner, this is a well-understood path to persistence and lateral movement, and the
+    migration is exactly when it gets introduced by accident.</p>
+    <p><strong>Mitigation:</strong> ephemeral runners only (one job per pod, never reused); self-hosted runners never
+    attached to public repositories; <code>pull_request_target</code> treated as a reviewed exception rather than a
+    convenience; runner network egress and identity scoped to what the build needs rather than inherited from the old
+    agent VMs; and runner groups restricting which repositories can schedule onto which pools. Decide these before the
+    first self-hosted runner exists — retrofitting them means auditing every workflow.</p>
+  </section>
+
+  <section data-tweak-id="risk.cost" data-tweak-kind="risk">
+    <h3>Compute cost becomes visible, and visible cost reads as new cost <span class="tag med">medium</span></h3>
+    <p>Jenkins compute is usually buried in an infrastructure budget nobody itemises. Actions minutes arrive as a line
+    item, and the first invoice can trigger a reaction out of proportion to the actual change — especially where
+    matrix builds got copied across without anyone asking whether every combination is needed.</p>
+    <p><strong>Mitigation:</strong> baseline current Jenkins compute spend during Phase 1 so the comparison is
+    available before it is demanded; model expected minutes from real build durations during the pilot; set concurrency
+    limits and path filters in the golden paths so pushes do not trigger unnecessary work; and present the Phase 6
+    decommission savings alongside the new cost rather than months later.</p>
+  </section>
+
+  <section data-tweak-id="risk.build-number-continuity" data-tweak-kind="risk">
+    <h3>Build numbers and artifact versioning discontinuity <span class="tag med">medium</span></h3>
+    <p>Jenkins <code>BUILD_NUMBER</code> is monotonic per job and frequently ends up embedded in artifact versions,
+    image tags, or release names. <code>github.run_number</code> starts at 1 for a new workflow, which can produce
+    version numbers that go backwards — and downstream systems that resolve "latest" by version ordering will do
+    something surprising and hard to diagnose.</p>
+    <p><strong>Mitigation:</strong> identify affected jobs in Phase 1 (search for <code>BUILD_NUMBER</code> in the
+    inventory); prefer moving those to semantic versions or commit-SHA tags during migration, which is the better
+    end state anyway; and where continuity is genuinely required, add a fixed offset so numbering continues past the
+    Jenkins high-water mark.</p>
+  </section>
+
+  <section data-tweak-id="risk.cross-job-graph" data-tweak-kind="risk">
+    <h3>Cross-job dependencies break in the middle of the migration <span class="tag med">medium</span></h3>
+    <p>Jobs that trigger other jobs, or copy artifacts from them, only work if both ends are on the same system — or if
+    someone bridges them. A repository migrated in Wave 1 whose downstream deploy job is still on Jenkins is a broken
+    pipeline, and the breakage lands on whoever pushes next rather than on the migrator.</p>
+    <p><strong>Mitigation:</strong> the Phase 1 dependency graph drives wave composition — connected components migrate
+    together, not repository by repository. Where a component is too large to move at once, bridge deliberately
+    (<code>repository_dispatch</code> from Jenkins, or a Jenkins job triggered by a workflow) with the bridge tracked
+    as scheduled debt with a removal date, never as an unplanned improvisation.</p>
+  </section>
+
+  <section data-tweak-id="risk.adoption" data-tweak-kind="risk">
+    <h3>The long tail stalls <span class="tag med">medium</span></h3>
+    <p>The failure mode for this kind of programme is not technical: it is eighty percent migration, no shutdown date,
+    and two CI systems forever. Teams migrate the repositories they touch daily and leave the rest, and the residual
+    Jenkins keeps the escape hatch open indefinitely.</p>
+    <p><strong>Mitigation:</strong> the public shutdown date from Phase 6 set during Phase 4; a visible per-team
+    dashboard; disabling rather than migrating anything nobody will claim; and executive agreement up front that the
+    date is real, obtained while the programme is still popular rather than when it is behind.</p>
+  </section>
+</section>
+
+</body>
+</html>

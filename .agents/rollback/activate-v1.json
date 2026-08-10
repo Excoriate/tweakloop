@@ -1,0 +1,26 @@
+{
+  "protocol": "tweakloop.agent-harness-rollback/v1",
+  "consumers": {
+    ".agents/derivations.json": {
+      "kind": "copy",
+      "source": ".agents/rollback/shadow-derivations.json"
+    },
+    "AGENTS.md": {
+      "kind": "canonical-guide",
+      "source": ".agents/AGENTS.md"
+    },
+    "CLAUDE.md": {
+      "kind": "symlink",
+      "target": "AGENTS.md"
+    },
+    ".claude/settings.json": {
+      "kind": "absent"
+    },
+    ".codex/hooks.json": {
+      "kind": "absent"
+    },
+    ".cursor/hooks.json": {
+      "kind": "absent"
+    }
+  }
+}

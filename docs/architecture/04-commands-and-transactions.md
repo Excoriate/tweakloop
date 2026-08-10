@@ -90,3 +90,16 @@ Do not let:
 write directly to SQLite.
 
 All durable mutations pass through the daemon transactor.
+
+### 7.4 Authority is derived before command execution
+
+The generic command boundary derives human authority from the authenticated shell transport. The
+CLI can submit explicit agent operations, but it cannot label a command human: `decision accept`,
+`decision reopen`, `review submit-comments`, and default-human chat paths stop with
+`human.browser-required`, `mutated: false`, and a fresh-shell continuation before mutation.
+
+Semantic whiteboard automation uses a narrower transaction. The daemon validates and consumes one
+scoped automation token, revalidates the active session and runtime generation, checks the
+caller-visible application idempotency key, and applies the draft mutation inside one immediate
+transaction. A used token cannot replay transport authority; a freshly minted token with the same
+business key and identical payload returns the original semantic receipt without reapplying.

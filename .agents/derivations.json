@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "tweakloop.agent-derivations/v1",
+  "phase": "activate",
+  "canonicalRoot": ".agents",
+  "derivations": [
+    {
+      "id": "root-agent-guide",
+      "type": "identity-copy",
+      "mode": "generate",
+      "source": ".agents/AGENTS.md",
+      "consumer": "AGENTS.md",
+      "generator": "node scripts/sync-agent-harness.mjs --activate",
+      "validator": "node scripts/validate-agent-harness.mjs --json",
+      "activation": {
+        "status": "partial",
+        "proof": "Installed Codex 0.147.0 observed the isolated root guide marker exactly once; Cursor native load remains unexecuted."
+      },
+      "rollback": "When every active consumer matches the intact ordinary-drift lock, node scripts/sync-agent-harness.mjs --rollback restores the shadow manifest and preserves the root guide bytes; otherwise it fails closed.",
+      "deletion": "Delete the generated root edge if an installed client demonstrates duplicate guide loading or stops consuming root AGENTS.md."
+    },
+    {
+      "id": "claude-agent-guide-import",
+      "type": "native-import",
+      "mode": "planned",
+      "source": ".agents/AGENTS.md",
+      "consumer": "CLAUDE.md",
+      "generator": "node scripts/sync-agent-harness.mjs --activate",
+      "validator": "Fresh Claude context plus node scripts/validate-agent-harness.mjs --json",
+      "activation": {
+        "status": "unverified",
+        "proof": "A fresh Claude context observes the canonical marker exactly once through a one-line native import."
+      },
+      "rollback": "Preserve the existing CLAUDE.md symlink and root guide behavior.",
+      "deletion": "Delete the planned import if the target Claude version cannot load it or a native loader makes it redundant."
+    }
+  ]
+}
