@@ -40,7 +40,7 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@playwright/test": "^1.62.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.2.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "esbuild": "^0.25.12",
