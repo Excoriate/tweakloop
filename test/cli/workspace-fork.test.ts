@@ -38,6 +38,7 @@ import {
 } from "../../src/workspace/files.js";
 import { validateWorkspaceRestoreManifest } from "../../src/workspace/restore.js";
 import { createWorkspaceForkPlanStore } from "../../src/workspace/restore-journal.js";
+import { mkdtempInRepo } from "../support/repo-temp-dir.js";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -289,7 +290,7 @@ describe("forked workspace bundles", () => {
     const stateDir = join(source.root, "cli-state");
     const controllerRoot = join(source.root, "cli-controller");
     const destinationRoot = join(source.root, "cli-fork");
-    const cliRoot = mkdtempSync(join(process.cwd(), ".ai", "workspace-fork-cli-"));
+    const cliRoot = mkdtempInRepo("workspace-fork-cli-");
     roots.push(cliRoot);
     const cli = join(cliRoot, "tweak-cli.mjs");
     mkdirSync(stateDir);

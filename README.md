@@ -23,7 +23,11 @@ immutable revisions, and accept or reopen — nothing is done until you say so.
 
 <div align="center">
 
-![Tweakloop demo — review loop: comment, revise, accept](./assets/tweakloop-demo.mp4)
+<a href="https://github.com/Excoriate/tweakloop/blob/main/assets/tweakloop-demo.mp4">
+  <img src="assets/logos/logo.png" alt="Tweakloop demo — review loop: comment, revise, accept" width="480">
+</a>
+
+**[▶ Watch the demo](https://github.com/Excoriate/tweakloop/blob/main/assets/tweakloop-demo.mp4)** · [Direct download](assets/tweakloop-demo.mp4)
 
 </div>
 
@@ -185,7 +189,7 @@ Report vulnerabilities via [GitHub Security Advisories](SECURITY.md#reporting-a-
 
 - [Start with the documentation map](docs/README.md)
 - [Understand the product and non-goals](docs/prd.md)
-- [Use the complete CLI reference](docs/cli-reference.md)
+- [complete CLI reference](docs/cli-reference.md)
 - [Read the architecture](docs/architecture/README.md)
 
 ## Acknowledgements

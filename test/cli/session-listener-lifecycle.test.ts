@@ -8,9 +8,10 @@ import { build } from "esbuild";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type DaemonHandle, startDaemon } from "../../src/daemon/index.js";
 import { stateDirFor } from "../../src/daemon/runtime.js";
+import { mkdtempInRepo } from "../support/repo-temp-dir.js";
 
 const root = resolve(import.meta.dirname, "../..");
-const fixtureRoot = mkdtempSync(join(root, ".ai", "listener-lifecycle-"));
+const fixtureRoot = mkdtempInRepo("listener-lifecycle-");
 const cli = join(fixtureRoot, "dist", "cli", "index.js");
 
 let stateRoot: string;

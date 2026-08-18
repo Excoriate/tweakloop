@@ -1,12 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { workspaceIdFor } from "../../src/daemon/runtime.js";
+import { mkdtempInRepo } from "../support/repo-temp-dir.js";
 
 const root = resolve(import.meta.dirname, "../..");
-const fixtureRoot = mkdtempSync(join(root, ".ai", "c1-cli-test-"));
+const fixtureRoot = mkdtempInRepo("c1-cli-test-");
 const cli = join(fixtureRoot, "dist", "cli", "index.js");
 const daemonMain = join(fixtureRoot, "dist", "daemon", "main.js");
 const startupWorkspace = join(fixtureRoot, "startup-workspace");

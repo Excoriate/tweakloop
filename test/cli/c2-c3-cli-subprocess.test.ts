@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { workspaceIdFor } from "../../src/daemon/runtime.js";
+import { mkdtempInRepo } from "../support/repo-temp-dir.js";
 
 const root = resolve(import.meta.dirname, "../..");
-const fixtureRoot = mkdtempSync(join(root, ".ai", "c2-c3-cli-test-"));
+const fixtureRoot = mkdtempInRepo("c2-c3-cli-test-");
 const cli = join(fixtureRoot, "dist", "cli", "index.js");
 const workspace = join(fixtureRoot, "workspace");
 const stateRoot = join(fixtureRoot, "state");

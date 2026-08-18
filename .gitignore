@@ -3,6 +3,7 @@ dist/
 coverage/
 test-results/
 playwright-report/
+test/.tmp/
 .ai/
 *.log
 .DS_Store

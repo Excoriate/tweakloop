@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -16,9 +15,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { workspaceIdFor } from "../../src/daemon/runtime.js";
 import { canonicalizeWhiteboardScene } from "../../src/whiteboard/scene.js";
 import { emptySemanticSceneMap } from "../../src/whiteboard/semantic-representation.js";
+import { mkdtempInRepo } from "../support/repo-temp-dir.js";
 
 const root = resolve(import.meta.dirname, "../..");
-const fixtureRoot = mkdtempSync(join(root, ".ai", "r42-cli-test-"));
+const fixtureRoot = mkdtempInRepo("r42-cli-test-");
 const cli = join(fixtureRoot, "dist", "cli", "index.js");
 const workspace = join(fixtureRoot, "workspace");
 const stateRoot = join(fixtureRoot, "state");
