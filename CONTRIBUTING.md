@@ -29,3 +29,12 @@ The `Justfile` is the single entry point for every dev task — run `just` to li
 ## Tests
 
 New durable behavior needs: a `decide()` table test, and a projection-replay test where applicable (incremental application must equal full rebuild). Failure-path behavior (idempotent retry, stale versions, crash recovery) is part of the feature, not an afterthought — see [docs/architecture/14-failure-and-testing.md](docs/architecture/14-failure-and-testing.md).
+
+End-to-end browser verification (Chromium):
+
+```bash
+pnpm exec playwright install --with-deps chromium
+just check e2e
+```
+
+CI runs the same graph: build, guide/skill/hook projection parity, unit tests, lint, and the real-browser review loop.

@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Worktree CLI — plan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #172033;
+      --muted: #5d6678;
+      --paper: #ffffff;
+      --canvas: #f3f5f9;
+      --line: #dfe4ec;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --success: #087a55;
+      --warning: #a15c00;
+      --shadow: 0 18px 55px rgb(23 32 51 / 8%);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-size: 17px;
+      line-height: 1.65;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--accent); text-underline-offset: 0.16em; }
+    a:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 4px; border-radius: 4px; }
+
+    .page {
+      width: min(100% - 32px, 1080px);
+      margin: 32px auto;
+      overflow: clip;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: clamp(32px, 7vw, 76px) clamp(24px, 7vw, 84px) clamp(28px, 5vw, 54px);
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 28%),
+        var(--paper);
+    }
+
+    .eyebrow, .status, dt {
+      font-size: 0.75rem;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow { margin: 0 0 14px; color: var(--accent); }
+
+    h1 {
+      max-width: 16ch;
+      margin: 0;
+      font-size: clamp(2.35rem, 7vw, 5.3rem);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+    }
+
+    .lede {
+      max-width: 62ch;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.28rem);
+      line-height: 1.55;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .status {
+      padding: 6px 10px;
+      border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    main { padding: clamp(24px, 6vw, 72px); }
+
+    .reading { max-width: 72ch; }
+
+    section + section { margin-top: clamp(42px, 7vw, 72px); }
+
+    h2, h3 { line-height: 1.15; letter-spacing: -0.025em; }
+    h2 { margin: 0 0 18px; font-size: clamp(1.65rem, 3vw, 2.25rem); }
+    h3 { margin: 0 0 8px; font-size: 1.08rem; }
+    p { margin: 0.7em 0; }
+
+    .decision {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.46fr);
+      gap: 28px;
+      padding: clamp(22px, 4vw, 38px);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--accent-soft) 58%, var(--paper));
+    }
+
+    .decision strong { color: var(--accent); }
+
+    dl { margin: 0; }
+    dt { color: var(--muted); }
+    dd { margin: 4px 0 18px; font-weight: 650; }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .steps li {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      counter-increment: step;
+    }
+
+    .steps li::before {
+      display: block;
+      margin-bottom: 12px;
+      color: var(--accent);
+      content: "0" counter(step);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .steps p { color: var(--muted); font-size: 0.95rem; }
+
+    details {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper);
+    }
+
+    summary {
+      padding: 15px 18px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    details > div { padding: 0 18px 18px; color: var(--muted); }
+
+    .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: color-mix(in srgb, var(--canvas) 70%, var(--paper)); }
+    tr:last-child td { border-bottom: 0; }
+
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+
+    .callout {
+      padding: 18px 20px;
+      border-left: 4px solid var(--warning);
+      border-radius: 0 10px 10px 0;
+      background: color-mix(in srgb, #f59e0b 9%, var(--paper));
+    }
+
+    footer { padding: 22px clamp(24px, 6vw, 72px); border-top: 1px solid var(--line); color: var(--muted); font-size: 0.88rem; }
+
+    @media (max-width: 720px) {
+      .page { width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+      .decision, .steps { grid-template-columns: 1fr; }
+      h1 { max-width: 13ch; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #edf0f7;
+        --muted: #a9b1c2;
+        --paper: #151823;
+        --canvas: #0d0f16;
+        --line: #2b3040;
+        --accent: #a9a4ff;
+        --accent-soft: #242348;
+        --success: #5bd7ad;
+        --warning: #f4b45f;
+        --shadow: 0 20px 60px rgb(0 0 0 / 28%);
+      }
+    }
+
+    @media print {
+      body, .page { background: #fff; color: #111; }
+      .page { width: 100%; margin: 0; border: 0; box-shadow: none; }
+      details { break-inside: avoid; }
+      details > div { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header class="hero" data-tweak-id="plan.identity" data-tweak-kind="document-identity">
+      <p class="eyebrow">Implementation plan · Draft</p>
+      <h1>Worktree CLI</h1>
+      <p class="lede">A Rust command-line tool to create, list, switch, and clean up Git worktrees — fast, scriptable, and safe for parallel agent workflows.</p>
+      <div class="status-row">
+        <span class="status">Draft</span>
+        <span class="status">Owner · Alex</span>
+        <span class="status">Updated · 2026-08-18</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="decision" data-tweak-id="plan.decision" data-tweak-kind="decision" aria-labelledby="decision-title">
+        <div class="reading">
+          <p class="eyebrow">Decision requested</p>
+          <h2 id="decision-title">Should we build a dedicated Rust worktree CLI instead of shell wrappers?</h2>
+          <p><strong>Recommendation:</strong> Yes — start with a thin Rust binary that wraps <code>git worktree</code> for the core operations, adds structured JSON output, and enforces safe defaults (naming, path layout, stale detection).</p>
+        </div>
+        <dl>
+          <dt>Decide by</dt><dd>First review cycle</dd>
+          <dt>Next step</dt><dd>Scaffold crate + implement <code>list</code> and <code>add</code></dd>
+          <dt>Confidence</dt><dd>Medium — Git worktree semantics are stable; UX and safety rules need your input</dd>
+        </dl>
+      </section>
+
+      <section data-tweak-id="plan.scope" data-tweak-kind="requirement" aria-labelledby="scope-title">
+        <div class="reading">
+          <p class="eyebrow">Scope</p>
+          <h2 id="scope-title">What v0 must do</h2>
+          <p>v0 is a local developer tool, not a Git server. It orchestrates worktrees inside an existing repository checkout.</p>
+        </div>
+        <section class="table-scroll" aria-label="Command surface">
+          <table>
+            <thead><tr><th>Command</th><th>Purpose</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td><code>wt list</code></td><td>Show all worktrees with branch, path, dirty state</td><td>Default human table; <code>--json</code> for scripts</td></tr>
+              <tr><td><code>wt add &lt;name&gt;</code></td><td>Create a worktree under a convention path</td><td>Default: <code>../&lt;repo&gt;-&lt;name&gt;</code> on a new branch <code>wt/&lt;name&gt;</code></td></tr>
+              <tr><td><code>wt remove &lt;name&gt;</code></td><td>Remove worktree and optionally delete branch</td><td>Refuses if dirty unless <code>--force</code></td></tr>
+              <tr><td><code>wt prune</code></td><td>Remove stale worktree registrations</td><td>Maps to <code>git worktree prune</code> + orphan detection</td></tr>
+              <tr><td><code>wt cd &lt;name&gt;</code></td><td>Print path for shell integration</td><td><code>eval "$(wt cd foo)"</code> or direnv hook later</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      <section data-tweak-id="plan.outcomes" data-tweak-kind="success-criteria" aria-labelledby="outcomes-title">
+        <div class="reading">
+          <p class="eyebrow">The finish line</p>
+          <h2 id="outcomes-title">What success means</h2>
+          <p>v0 is done when an agent or human can spin up an isolated worktree, do work, and tear it down without touching the main checkout.</p>
+        </div>
+        <ol class="steps">
+          <li><h3>Fast listing</h3><p><code>wt list --json</code> returns stable fields in &lt;200ms on a repo with 10 worktrees.</p></li>
+          <li><h3>Safe creation</h3><p><code>wt add feature-x</code> creates path + branch; rerunning fails clearly instead of corrupting state.</p></li>
+          <li><h3>Clean removal</h3><p><code>wt remove feature-x</code> refuses dirty trees; <code>--force</code> documented with explicit risk.</p></li>
+          <li><h3>Scriptable output</h3><p>Every command supports <code>--json</code> with schema-stable keys for automation.</p></li>
+        </ol>
+      </section>
+
+      <section data-tweak-id="plan.approach" data-tweak-kind="ordered-plan" aria-labelledby="approach-title">
+        <div class="reading">
+          <p class="eyebrow">Smallest credible path</p>
+          <h2 id="approach-title">The plan</h2>
+          <p>Four phases. Each phase ships a usable command before moving on.</p>
+        </div>
+        <ol class="steps">
+          <li><h3>Phase 1 — Scaffold</h3><p>Cargo binary <code>wt</code>, <code>clap</code> CLI, <code>--json</code> output helper, integration test harness invoking real <code>git</code> in a temp repo.</p></li>
+          <li><h3>Phase 2 — Read path</h3><p>Implement <code>list</code> and <code>cd</code> by parsing <code>git worktree list --porcelain</code> plus porcelain status for dirty detection.</p></li>
+          <li><h3>Phase 3 — Write path</h3><p>Implement <code>add</code> and <code>remove</code> with naming conventions, idempotency checks, and actionable error messages.</p></li>
+          <li><h3>Phase 4 — Hygiene</h3><p>Implement <code>prune</code>, stale-worktree warnings in <code>list</code>, and shell completion snippets.</p></li>
+        </ol>
+        <details data-tweak-id="plan.approach.detail" data-tweak-kind="implementation-detail">
+          <summary>Open implementation detail</summary>
+          <div>
+            <p><strong>Stack:</strong> Rust 2021, <code>clap</code> (derive), <code>serde</code>/<code>serde_json</code>, <code>anyhow</code>/<code>thiserror</code> for errors. No libgit2 in v0 — shell out to the installed <code>git</code> binary for correctness and to avoid linking complexity.</p>
+            <p><strong>Layout:</strong> Single crate at repo root or <code>tools/wt/</code>. Modules: <code>cli</code>, <code>git</code> (command runner), <code>model</code> (Worktree struct), <code>output</code> (table vs JSON).</p>
+            <p><strong>Config:</strong> Optional <code>.wt.toml</code> later; v0 uses flags only. Defaults: worktree parent directory = sibling of repo root; branch prefix = <code>wt/</code>.</p>
+            <p><strong>Tests:</strong> End-to-end tests in <code>tests/</code> using <code>tempfile</code> + real git init/worktree operations. CI runs on Linux and macOS.</p>
+          </div>
+        </details>
+        <details data-tweak-id="plan.alternatives" data-tweak-kind="alternative-analysis">
+          <summary>Why not the alternatives?</summary>
+          <div>
+            <p><strong>Shell scripts / Just recipes:</strong> Fast to start but brittle for JSON output, error handling, and cross-platform path logic. Good for prototypes, poor for agent consumption.</p>
+            <p><strong>Python CLI:</strong> Fine DX, but Rust gives a single static binary, stronger typing for output contracts, and matches a performance-sensitive tooling direction.</p>
+            <p><strong>libgit2 / gitoxide:</strong> More control, but worktree edge cases and parity with CLI behavior add scope. Revisit if shell-out becomes a bottleneck.</p>
+          </div>
+        </details>
+      </section>
+
+      <section data-tweak-id="plan.questions" data-tweak-kind="question" aria-labelledby="questions-title">
+        <div class="reading">
+          <p class="eyebrow">Open questions</p>
+          <h2 id="questions-title">Need your call</h2>
+        </div>
+        <ul>
+          <li>Default worktree location: sibling directory (<code>../repo-name-wt-foo</code>) or hidden <code>.worktrees/</code> inside the repo?</li>
+          <li>Should <code>wt add</code> auto-fetch and track a remote branch, or always create a local branch?</li>
+          <li>Binary name: <code>wt</code>, <code>worktree</code>, or something project-specific?</li>
+          <li>Live inside this repo as <code>tools/wt/</code>, or a new standalone repository?</li>
+        </ul>
+      </section>
+
+      <section data-tweak-id="plan.risks" data-tweak-kind="risk-set" aria-labelledby="risks-title">
+        <div class="reading">
+          <p class="eyebrow">Know before committing</p>
+          <h2 id="risks-title">Risks and boundaries</h2>
+          <p class="callout"><strong>Stop condition:</strong> If Git worktree behavior differs materially across macOS/Linux versions we support, pause and document the matrix before adding write commands.</p>
+        </div>
+        <section class="table-scroll" aria-label="Risk register">
+          <table>
+            <thead><tr><th>Risk</th><th>Signal</th><th>Response</th><th>Owner</th></tr></thead>
+            <tbody>
+              <tr><td>Dirty-tree data loss on remove</td><td>User reports lost uncommitted work</td><td>Default refuse; require <code>--force</code>; print diff stat before delete</td><td>Implementer</td></tr>
+              <tr><td>Path collisions</td><td><code>wt add</code> targets existing directory</td><td>Pre-flight check; never <code>rm -rf</code> implicitly</td><td>Implementer</td></tr>
+              <tr><td>Git version drift</td><td>Porcelain format changes</td><td>Pin minimum Git version; parse tests against 2.30+</td><td>CI</td></tr>
+              <tr><td>Scope creep into full Git UI</td><td>Requests for commit, push, rebase in v0</td><td>Explicit non-goal; link to git//gh instead</td><td>Product</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+    </main>
+
+    <footer data-tweak-id="plan.review-instruction" data-tweak-kind="review-guidance">
+      Comment on the decision, scope commands, open questions, or any plan phase that should change. Tweakloop keeps these semantic anchors stable across revisions.
+    </footer>
+  </article>
+</body>
+</html>

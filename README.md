@@ -1,29 +1,35 @@
 <div align="center">
 
+<img src="assets/logos/banner.png" alt="Tweakloop — Review. Iterate. Accept. Local-first review workspace for agent-made plans, docs, and diagrams." width="100%">
+
 # Tweakloop
 
 **Review agent-made plans, docs, and diagrams without losing the thread.**
 
-Tweakloop is a local-first review workspace for developers using coding agents. Open HTML,
-Markdown, or Excalidraw in a browser, comment on the exact thing, let an agent publish a new
-immutable revision, then accept it or ask for another pass.
+Your agent ships a plan. You comment in chat. It “fixes” something. Three revisions later, nobody
+remembers what changed or what you accepted. Tweakloop is a **local review workspace** for that
+loop: comment on the exact paragraph or shape, turn feedback into claimable agent work, publish
+immutable revisions, and accept or reopen — nothing is done until you say so.
+
+**v0.1 alpha** — the core loop works today for HTML, Markdown, and Excalidraw on your machine.
+[What's ready and what's not →](#project-status)
 
 [![CI](https://github.com/Excoriate/tweakloop/actions/workflows/ci.yml/badge.svg)](https://github.com/Excoriate/tweakloop/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f766e.svg)](LICENSE)
+[![v0.1 alpha](https://img.shields.io/badge/status-v0.1%20alpha-f59e0b.svg)](#project-status)
+[![Node 24+](https://img.shields.io/badge/node-24+-339933.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+
+[Quickstart](#try-it-locally) · [Why](#why-tweakloop) · [How it works](#how-the-loop-works) · [Agent setup](#connect-your-coding-agent) · [Docs](#documentation)
+
+<div align="center">
+
+![Tweakloop demo — review loop: comment, revise, accept](./assets/tweakloop-demo.mp4)
 
 </div>
 
-```mermaid
-flowchart LR
-    A["Open<br/>immutable R1"] --> B["Review<br/>exact text or shape"]
-    B --> C["Claim<br/>agent-owned work"]
-    C --> D["Revise<br/>publish R2"]
-    D --> E["Decide<br/>accept or reopen"]
-    E -. "another pass" .-> B
-```
+If this matches how you work with agents, **[star the repo](https://github.com/Excoriate/tweakloop)** for updates.
 
-Each comment, agent task, revision, and human decision stays connected in one durable local
-history. Live activity can disappear; committed workflow facts do not become mutable chat lore.
+</div>
 
 ## Try it locally
 
@@ -38,34 +44,65 @@ pnpm install --frozen-lockfile
 just open examples/plan.html
 ```
 
-Tweakloop builds the project, starts a workspace-local daemon, snapshots the example as an
-immutable revision, and opens a one-time authenticated review URL. You should see the document,
-its revision selector, Comment mode, and the collaboration rail.
+This builds the project, starts a workspace-local daemon, snapshots the example as revision R1,
+and opens a one-time authenticated review URL. You should see the document, its revision selector,
+**Comment mode**, and the collaboration rail.
 
-On a headless host—or anywhere the platform browser opener is unavailable—replace the last line
-with:
+<details>
+<summary>Headless or CI (no browser opener)</summary>
 
 ```bash
 just build
 node dist/cli/index.js open examples/plan.html --no-browser
 ```
 
-Open the printed URL yourself. The source-checkout route is the supported starting point while
-registry publication remains unverified.
+Open the printed URL yourself.
+
+</details>
 
 ## Why Tweakloop
 
-- **Revisions, not a mutable preview.** Every publication is an immutable value with explicit
-  ancestry. A prior result remains reviewable after the source file changes.
+Better than scattered agent chat and ad-hoc file edits when you need **accountability across
+review rounds**:
+
+- **Revisions, not a mutable preview.** Every publication is a new revision you can compare. An
+  older result stays reviewable after the source file on disk changes.
 - **Feedback becomes work.** A comment can stay conversational or become typed, claimable work
   tied to the exact artifact and revision that produced it.
-- **Agents are interchangeable.** Codex, Claude Code, Cursor, OpenCode, or any process that can
-  invoke a CLI can use the same versioned protocol. Tweakloop does not host or special-case a
-  model.
+- **Agents are interchangeable.** Codex, Claude Code, Cursor, OpenCode, or any CLI-capable
+  process can use the same protocol. Tweakloop does not host or special-case a model.
 - **“Done” is not “accepted.”** Agent activity, claimed work, a returned revision, readiness for
-  review, and the human decision remain separate facts.
+  review, and your decision remain separate facts.
+
+## Who this is for
+
+**For:** developers who use coding agents daily and review plans, architecture docs, or diagrams
+before trusting them — and want that review to survive past the current chat thread.
+
+**Not for:** replacing Git, hosting a model, cloud sync, or running arbitrary repo mutations from
+the review shell. Tweakloop coordinates and records the review loop; it does not execute
+implementation work on your codebase.
 
 ## How the loop works
+
+| 🔁 Stage | 👤 You | 🤖 Agent | 📋 Output |
+|---|---|---|---|
+| Open | Publish an artifact for review | — | Revision R1 |
+| Review | Select exact text or shape; leave typed feedback | — | Comments / intents |
+| Claim | — | Takes ownership of the work durably | Claim receipt |
+| Revise | — | Publishes a child revision | Revision R2+ |
+| Decide | Accept or reopen | — | Human decision recorded |
+
+<details>
+<summary>Loop at a glance (ASCII)</summary>
+
+<pre>
+  Open R1 ──▶ Review ──▶ Claim ──▶ Revise R2 ──▶ Decide
+    ▲                                            │
+    └──────────────── reopen ────────────────────┘
+</pre>
+
+</details>
 
 1. **Open.** Tweakloop registers the artifact and publishes its bytes as revision R1.
 2. **Review.** You select an exact section, paragraph, or whiteboard element and describe the
@@ -75,13 +112,9 @@ registry publication remains unverified.
 4. **Revise.** The agent publishes R2 as a child of R1 and reports what it addressed.
 5. **Decide.** You compare the result and accept it or reopen the work for another pass.
 
-Tweakloop coordinates and records this review loop. It does not execute arbitrary repository
-changes, host a model, replace Git, provide cloud sync, or promote an agent's completion to human
-acceptance.
-
 ## What you can review
 
-| Artifact | What Tweakloop preserves | Start here |
+| 📄 Artifact | ✨ What Tweakloop preserves | 👉 Start here |
 |---|---|---|
 | HTML | semantic anchors, interactive rendering, immutable revisions | [`examples/plan.html`](examples/plan.html) |
 | Markdown | heading ancestry, stable block anchors, safe rendering | [`examples/markdown-collaboration.md`](examples/markdown-collaboration.md) |
@@ -92,78 +125,61 @@ Chat in one session instead of scattering the review across unrelated tools.
 
 ## Connect your coding agent
 
-Tweakloop ships a public agent skill with the complete safe workflow: open, inspect, claim, revise,
-publish, complete, and hand the result back for a human decision.
+Install the public skill, then ask your agent to run the workflow:
 
 ```bash
 npx skills add Excoriate/tweakloop --skill tweakloop
 ```
 
-Then ask your agent:
-
 > Use the Tweakloop skill to draft a plan for this change, open it for my review, address the
 > feedback I submit, and return the revised artifact for acceptance.
 
-The canonical public workflow is
-[`.agents/skills/tweakloop/SKILL.md`](.agents/skills/tweakloop/SKILL.md); its installable copy is
-[`skills/tweakloop/SKILL.md`](skills/tweakloop/SKILL.md). Both are standalone—personal workflow
-harnesses are not shipped or required. For direct automation and output contracts, use the
-[complete CLI reference](docs/cli-reference.md).
+Choose the agent and project scope when prompted. The skill runs with that agent's permissions.
+Full workflow: [agent skill](skills/tweakloop/SKILL.md) ·
+[CLI reference](docs/cli-reference.md)
 
 ## Local-first by design
 
-- One daemon owns one workspace and binds to loopback only.
-- The review shell and untrusted artifact content run on separate origins; artifact content gets
-  no shell credential or mutation route.
-- SQLite stores an append-only event log, while immutable bytes live in a content-addressed object
-  store. Current views are rebuildable projections.
-- Human comments, default-human chat, accept, and reopen derive authority from the authenticated
-  browser. CLI callers cannot label themselves human to bypass that boundary.
-- The trust boundary is the local OS user. Tweakloop does not claim isolation from a hostile
-  same-user process that can read another client's private files or memory.
+- Loopback-only daemon; review shell and artifact content on **separate origins** (artifact content
+  has no shell credential or mutation route).
+- Append-only local event log plus content-addressed bytes; human accept/reopen requires the
+  authenticated browser session.
+- Trust boundary is the local OS user — see [SECURITY.md](SECURITY.md) for the full model.
 
-See the [security policy](SECURITY.md),
-[failure model](docs/architecture/14-failure-and-testing.md), and
-[design laws](docs/design-principles.md) for the full contract.
+More: [failure model](docs/architecture/14-failure-and-testing.md) ·
+[design principles](docs/design-principles.md)
 
 ## Project status
 
-Tweakloop is **v0.1 alpha**. The core review loop runs end to end for HTML, Markdown, and
-Excalidraw, including typed feedback, atomic agent claims, immutable child revisions, live browser
-updates, and explicit human accept/reopen. The Chromium end-to-end suite exercises that loop, and
-the CI workflow requires the suite on every pull request and `main` push.
+> **v0.1 alpha.** The core review loop runs end to end for HTML, Markdown, and Excalidraw —
+> typed feedback, atomic agent claims, immutable child revisions, live browser updates, and
+> explicit human accept/reopen. CI runs the Chromium end-to-end suite on every pull request and
+> `main` push.
 
-Current boundaries matter:
+<details>
+<summary>Known gaps (read before adopting deeply)</summary>
 
-- first-class evidence objects and verification records are not implemented yet; completion
-  summaries, semantic checks, diffs, and human decisions are available today;
-- automatic cross-revision anchor re-resolution and explicit orphan facts remain incomplete;
-- owned-daemon restart and recovery paths are exercised, but arbitrary SIGKILL, power-loss, and
-  cross-platform crash consistency are not claimed;
-- Chromium is the primary browser test target; Firefox, WebKit, and screen-reader verification are
-  still open.
+- First-class evidence objects and verification records are not implemented yet; completion
+  summaries, semantic checks, diffs, and human decisions are available today.
+- Automatic cross-revision anchor re-resolution and explicit orphan facts remain incomplete.
+- Owned-daemon restart and recovery paths are exercised, but arbitrary SIGKILL, power-loss, and
+  cross-platform crash consistency are not claimed.
+- Chromium is the primary browser test target; Firefox, WebKit, and screen-reader verification
+  are still open.
 
-The exact docs-to-code ledger lives in
-[`docs/architecture/16-implementation-status.md`](docs/architecture/16-implementation-status.md).
+</details>
+
+Exact docs-to-code ledger:
+[`docs/architecture/16-implementation-status.md`](docs/architecture/16-implementation-status.md)
 
 ## Contributing
 
-Tweakloop keeps the domain small by making durable facts, identities, authority, and failure paths
-explicit. Before modeling new behavior, read the
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, `just check`, end-to-end tests, and architecture
+expectations. Before modeling new behavior, read the
 [design principles](docs/design-principles.md) and
 [ubiquitous language](docs/ubiquitous-language.md).
 
-```bash
-pnpm install --frozen-lockfile
-pnpm exec playwright install --with-deps chromium
-just check e2e
-```
-
-That is the product-owned verification graph the CI workflow invokes: build, guide/skill/hook
-projection parity, the OSS test suite, formatting/lint checks, and the real-browser loop. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for test and architecture expectations, and use
-[GitHub Security Advisories](SECURITY.md#reporting-a-vulnerability) for private vulnerability
-reports.
+Report vulnerabilities via [GitHub Security Advisories](SECURITY.md#reporting-a-vulnerability).
 
 ## Documentation
 
@@ -180,4 +196,4 @@ durable, agent-neutral review workflow with immutable revisions and explicit hum
 
 ## License
 
-[MIT](LICENSE) © Alex Torres Ruiz.
+[MIT](LICENSE) © Alex Torres.
